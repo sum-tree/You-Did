@@ -279,3 +279,84 @@ test("invalid or inconsistent backups are rejected without accepting duplicate r
     false,
   );
 });
+
+test("backup daily selection rejects duplicates and nonexistent tasks", () => {
+  const data = dataWith(task("a"));
+  const duplicate = { ...data, daily: { [day]: ["a", "a"] } };
+  assert.equal(validateData(duplicate), false);
+  assert.deepEqual(
+    dailyTasks(duplicate, day).map((t) => t.id),
+    ["a"],
+  );
+  assert.equal(validateData({ ...data, daily: { [day]: ["missing"] } }), false);
+});
+
+test("immutable completion snapshots must match the completed task", () => {
+  const data = completeTask(dataWith(task("course", "course")), "course", day);
+  for (const change of [
+    { title: "another" },
+    { amount: 18 },
+    { category: "job", kind: "resume", amount: 18 },
+  ]) {
+    const invalid = structuredClone(data);
+    Object.assign(invalid.completions[0], change);
+    assert.equal(validateData(invalid), false);
+  }
+});
+
+test("orphan task rewards and inconsistent reward dates are rejected", () => {
+  const done = completeTask(dataWith(task("a")), "a", day);
+  const orphan = { ...emptyData(), rewards: [...done.rewards] };
+  assert.equal(validateData(orphan), false);
+  const mismatch = structuredClone(done);
+  mismatch.rewards[0].date = addDays(day, 1);
+  assert.equal(validateData(mismatch), false);
+});
+
+test("goal and challenge rewards require matching quantities and amounts", () => {
+  const valid = completeTask(dataWith(task("cv", "resume", 18)), "cv", day);
+  assert.equal(validateData(valid), true);
+  const wrongAmount = structuredClone(valid);
+  wrongAmount.rewards.find((r) => r.id.startsWith("goal:")).amount = 5;
+  assert.equal(validateData(wrongAmount), false);
+  const wrongTier = structuredClone(valid);
+  wrongTier.rewards.find((r) => r.id.startsWith("bonus:")).id =
+    `bonus:${day}:job:2`;
+  assert.equal(validateData(wrongTier), false);
+  assert.equal(
+    validateData({
+      ...valid,
+      rewards: valid.rewards.filter((r) => !r.id.startsWith("goal:")),
+    }),
+    false,
+  );
+  const unknownReward = {
+    ...valid,
+    rewards: [
+      ...valid.rewards,
+      { id: "unknown", label: "unknown", amount: 5, date: day, week: day },
+    ],
+  };
+  assert.equal(validateData(unknownReward), false);
+});
+
+test("valid backups retain earned rewards when a new interview lowers progress", () => {
+  let data = completeTask(dataWith(task("cv", "resume", 18)), "cv", day);
+  data = saveTask(data, task("new-interview", "interview"), day);
+  assert.equal(weekStats(data, day).jobPercent, 50);
+  assert.equal(balance(data), 35);
+  assert.equal(validateData(data), true);
+});
+
+test("historical daily plans may reference completed and archived tasks", () => {
+  let data = chooseDaily(dataWith(task("a"), task("b")), day, ["a", "b"]);
+  data = completeTask(data, "a", day);
+  data = archiveTasks(data, ["b"]);
+  assert.equal(validateData(data), true);
+});
+
+test("single-unit contribution kinds reject unsupported backup amounts", () => {
+  for (const kind of ["interview", "course", "none"]) {
+    assert.equal(validateData(dataWith(task("a", kind, 2))), false);
+  }
+});

@@ -308,7 +308,7 @@ export function dailyTasks(data: AppData, date: string): Task[] {
   const manual = data.daily[date];
   if (manual !== undefined) {
     // Explicit selection takes precedence; all urgent tasks remain in the reminder area.
-    return manual
+    return [...new Set(manual)]
       .map((id) => open.find((task) => task.id === id))
       .filter((task): task is Task => Boolean(task))
       .slice(0, 3);
@@ -390,6 +390,7 @@ export function validateData(value: unknown): value is AppData {
         weekStart(t.plannedWeek) === t.plannedWeek &&
         contribution(t.kind, t.category) &&
         amount(t.amount) &&
+        (!["interview", "course", "none"].includes(t.kind) || t.amount === 1) &&
         ["open", "done", "archived"].includes(t.status) &&
         text(t.createdAt, 50),
     )
@@ -458,15 +459,90 @@ export function validateData(value: unknown): value is AppData {
     !unique(d.events.map((e) => e.id))
   )
     return false;
-  const completedIds = new Set(d.completions.map((c) => c.taskId));
-  if (!d.tasks.every((t) => (t.status === "done") === completedIds.has(t.id)))
+  const tasks = new Map(d.tasks.map((t) => [t.id, t]));
+  const completions = new Map(d.completions.map((c) => [c.taskId, c]));
+  const rewards = new Map(d.rewards.map((r) => [r.id, r]));
+  if (!d.tasks.every((t) => (t.status === "done") === completions.has(t.id)))
     return false;
-  return d.completions.every(
-    (c) =>
-      d.tasks.some((t) => t.id === c.taskId && t.status === "done") &&
-      d.rewards.some(
-        (r) =>
-          r.id === `task:${c.taskId}` && r.amount === 5 && r.week === c.week,
-      ),
-  );
+  if (
+    !Object.values(d.daily).every(
+      (ids) => unique(ids) && ids.every((id) => tasks.has(id)),
+    )
+  )
+    return false;
+
+  const totals = new Map<
+    string,
+    { resumes: number; cantonese: number; english: number; listening: number }
+  >();
+  for (const completion of d.completions) {
+    const task = tasks.get(completion.taskId);
+    const reward = rewards.get(`task:${completion.taskId}`);
+    if (
+      !task ||
+      task.status !== "done" ||
+      task.title !== completion.title ||
+      task.category !== completion.category ||
+      task.kind !== completion.kind ||
+      task.amount !== completion.amount ||
+      !reward ||
+      reward.amount !== 5 ||
+      reward.date !== completion.date ||
+      reward.week !== completion.week ||
+      reward.label !== completion.title
+    )
+      return false;
+    const week = totals.get(completion.week) ?? {
+      resumes: 0,
+      cantonese: 0,
+      english: 0,
+      listening: 0,
+    };
+    if (completion.kind === "resume") week.resumes += completion.amount;
+    if (completion.kind === "cantonese") week.cantonese += completion.amount;
+    if (completion.kind === "english") week.english += completion.amount;
+    if (completion.kind === "listening") week.listening += completion.amount;
+    totals.set(completion.week, week);
+  }
+  for (const reward of d.rewards) {
+    if (weekStart(reward.date) !== reward.week) return false;
+    if (reward.id.startsWith("task:")) {
+      if (!completions.has(reward.id.slice(5))) return false;
+      continue;
+    }
+    const goal = /^goal:(\d{4}-\d{2}-\d{2}):(job|speech)$/.exec(reward.id);
+    const bonus = /^bonus:(\d{4}-\d{2}-\d{2}):(job|speech):([1-9]\d*)$/.exec(
+      reward.id,
+    );
+    const match = goal ?? bonus;
+    if (!match || match[1] !== reward.week) return false;
+    const week = totals.get(reward.week);
+    if (!week) return false;
+    const category = match[2];
+    // Added interviews can lower present progress after a legitimate reward was earned.
+    // Only immutable quantities can be checked; do not require the current goal to be complete.
+    if (
+      category === "job"
+        ? week.resumes < 15
+        : week.cantonese < 2 || week.english < 9
+    )
+      return false;
+    if (goal) {
+      if (reward.amount !== 20) return false;
+    } else {
+      const tier = Number(match[3]);
+      const maxTier =
+        category === "job"
+          ? Math.floor((week.resumes - 15) / 3)
+          : Math.floor(week.listening / 10);
+      if (
+        !Number.isSafeInteger(tier) ||
+        tier > maxTier ||
+        reward.amount !== (category === "job" ? 10 : 5) ||
+        !rewards.has(`goal:${reward.week}:${category}`)
+      )
+        return false;
+    }
+  }
+  return true;
 }

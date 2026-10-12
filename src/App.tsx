@@ -50,7 +50,7 @@ import type {
   Contribution,
   Task,
 } from "./domain.ts";
-import { loadData, persistData } from "./storage.ts";
+import { loadData, persistData, STORAGE_KEY } from "./storage.ts";
 
 type Page = "daily" | "achievement" | "pool" | "calendar";
 const store = {
@@ -495,7 +495,10 @@ export default function App() {
     return true;
   };
   const update = (change: (previous: AppData) => AppData) => {
-    if (canChange()) setData(change);
+    if (canChange()) {
+      setToday(localDate());
+      setData(change);
+    }
   };
   useEffect(() => {
     if (!blocked) setError(persistData(store, data));
@@ -504,9 +507,11 @@ export default function App() {
     const updateDate = () => setToday(localDate());
     const timer = setInterval(updateDate, 30000);
     window.addEventListener("focus", updateDate);
+    document.addEventListener("visibilitychange", updateDate);
     return () => {
       clearInterval(timer);
       window.removeEventListener("focus", updateDate);
+      document.removeEventListener("visibilitychange", updateDate);
     };
   }, []);
   useEffect(() => {
@@ -516,7 +521,7 @@ export default function App() {
   }, [toast]);
   useEffect(() => {
     const handler = (event: StorageEvent) => {
-      if (event.key === "you-did:v1") {
+      if (event.key === STORAGE_KEY || event.key === null) {
         const next = loadData(store);
         setData(next.data);
         setBlocked(Boolean(next.error));
@@ -529,22 +534,26 @@ export default function App() {
   }, []);
   function finish(task: Task) {
     if (!canChange()) return;
-    const next = completeTask(data, task.id, today);
+    const date = localDate();
+    setToday(date);
+    const next = completeTask(data, task.id, date);
     const earned = balance(next) - balance(data);
-    setData((previous) => completeTask(previous, task.id, today));
+    setData((previous) => completeTask(previous, task.id, date));
     setToast(`You did it! +${earned} 卡拉米 · 每一步都算数`);
   }
   function commitTask(task: Task, todaySelected: boolean) {
     if (!canChange()) return;
-    if (todaySelected && daily.length >= 3) {
+    const date = localDate();
+    const dailyNow = dailyTasks(data, date);
+    if (todaySelected && dailyNow.length >= 3) {
       setToast("今日已有3项核心任务，请先更换或移出一项。");
       return;
     }
     update((previous) => {
-      const next = saveTask(previous, task, today);
+      const next = saveTask(previous, task, date);
       return todaySelected
-        ? chooseDaily(next, today, [
-            ...dailyTasks(previous, today).map((item) => item.id),
+        ? chooseDaily(next, date, [
+            ...dailyTasks(previous, date).map((item) => item.id),
             task.id,
           ])
         : next;
@@ -1305,14 +1314,15 @@ export default function App() {
                 </button>
                 <button
                   onClick={() => {
-                    const ids = daily.map((item) => item.id);
+                    const date = localDate();
+                    const ids = dailyTasks(data, date).map((item) => item.id);
                     if (!ids.includes(taskMenu.id) && ids.length >= 3) {
                       setToast("今日最多3项，请使用手动安排更换任务。");
                       return;
                     }
                     if (
-                      taskMenu.plannedWeek > week &&
-                      (!taskMenu.dueDate || taskMenu.dueDate > today)
+                      taskMenu.plannedWeek > weekStart(date) &&
+                      (!taskMenu.dueDate || taskMenu.dueDate > date)
                     ) {
                       setToast("这是下周的任务，调整计划周后再加入今日。");
                       return;
@@ -1320,7 +1330,7 @@ export default function App() {
                     update((previous) =>
                       chooseDaily(
                         previous,
-                        today,
+                        date,
                         ids.includes(taskMenu.id)
                           ? ids.filter((id) => id !== taskMenu.id)
                           : [...ids, taskMenu.id],
@@ -1337,7 +1347,7 @@ export default function App() {
                 <button
                   onClick={() => {
                     update((previous) =>
-                      moveTasks(previous, [taskMenu.id], today),
+                      moveTasks(previous, [taskMenu.id], localDate()),
                     );
                     setTaskMenu(null);
                     setToast("已移至下周，已获积分保留。");
@@ -1419,7 +1429,7 @@ export default function App() {
           <button
             className="primary"
             onClick={() => {
-              update((previous) => chooseDaily(previous, today, selection));
+              update((previous) => chooseDaily(previous, localDate(), selection));
               setChooser(false);
             }}
           >
@@ -1431,7 +1441,7 @@ export default function App() {
             onClick={() => {
               update((previous) => {
                 const days = { ...previous.daily };
-                delete days[today];
+                delete days[localDate()];
                 return { ...previous, daily: days };
               });
               setChooser(false);
@@ -1462,7 +1472,7 @@ export default function App() {
                 .map((task) => task.id);
               update((previous) =>
                 batch === "move"
-                  ? moveTasks(previous, ids, today)
+                  ? moveTasks(previous, ids, localDate())
                   : archiveTasks(previous, ids),
               );
               setBatch(null);
