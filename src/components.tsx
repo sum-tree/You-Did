@@ -5,7 +5,6 @@ import {
   CATEGORY,
   dateObject,
   inferContribution,
-  KIND,
   weekStart,
 } from "./domain.ts";
 import type { CalendarEvent, Category, Task } from "./domain.ts";
@@ -130,8 +129,6 @@ export function TaskForm({
   const [category, setCategory] = useState<Category>(
     existing?.category ?? "job",
   );
-  const [title, setTitle] = useState(existing?.title ?? "");
-  const detected = inferContribution(title.trim(), category);
   const submit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const fields = new FormData(event.currentTarget);
@@ -167,23 +164,13 @@ export function TaskForm({
         <input
           name="title"
           aria-label="任务名称"
-          aria-describedby="task-goal"
           required
           maxLength={200}
           placeholder="例如：投递3份心仪的岗位"
-          value={title}
-          onChange={(e) => {
-            e.currentTarget.setCustomValidity("");
-            setTitle(e.target.value);
-          }}
+          defaultValue={existing?.title}
+          onInput={(e) => e.currentTarget.setCustomValidity("")}
           autoFocus
         />
-        <small className="field-hint" id="task-goal">
-          计入：
-          {detected.kind === "none"
-            ? "不计目标量"
-            : `${KIND[detected.kind].label.split("（")[0]} · ${detected.amount}${KIND[detected.kind].unit}`}
-        </small>
       </label>
       <label>
         任务类型
