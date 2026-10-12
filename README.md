@@ -2,6 +2,8 @@
 
 每一个小小的完成，都值得被看见。手机端优先的求职与学习效率应用：每日任务、成就、待办、日历，以及即时卡拉米奖励。
 
+正式网站：[You Did!](https://sum-tree.github.io/You-Did/)。在iPhone Safari中打开后，可通过「分享 → 添加到主屏幕」安装。
+
 ## 在 Windows 本机启动
 
 需要 Node.js 24 或更高版本。打开 PowerShell：
