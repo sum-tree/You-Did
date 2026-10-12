@@ -15,6 +15,7 @@ import {
   moveTasks,
   normalizeData,
   saveTask,
+  uncompleteTask,
   settleRewards,
   validateData,
   validDate,
@@ -546,4 +547,72 @@ test("generated titles keep their quantity when re-inferred", () => {
   assert.deepEqual(inferContribution("香港秋招简历x5", "job"), { kind: "resume", amount: 5 });
   assert.deepEqual(inferContribution("英语面试练习3题", "speech"), { kind: "english", amount: 3 });
   assert.deepEqual(inferContribution("粤语30分钟", "speech"), { kind: "cantonese", amount: 1 });
+});
+test("a task completed today can be undone and loses its own reward", () => {
+  const data = dataWith(task("a"));
+  const done = completeTask(data, "a", day);
+  const undone = uncompleteTask(done, "a", day);
+  assert.deepEqual(undone, data);
+  assert.equal(validateData(undone), true);
+  assert.equal(uncompleteTask(undone, "a", day), undone);
+  assert.equal(uncompleteTask(done, "a", nextDay), done);
+});
+test("undo revokes the goal and tiers that completion produced today", () => {
+  const data = completeTask(dataWith(task("cv", "resume", 18)), "cv", day);
+  assert.equal(balance(data), 35);
+  const undone = uncompleteTask(data, "cv", day);
+  assert.equal(balance(undone), 0);
+  assert.equal(validateData(undone), true);
+});
+test("undo keeps rewards earned on earlier days", () => {
+  let data = dataWith(task("cv1", "resume", 15), task("cv2", "resume", 3));
+  data = completeTask(data, "cv1", day);
+  data = completeTask(data, "cv2", nextDay);
+  assert.equal(balance(data), 40);
+  const undone = uncompleteTask(data, "cv2", nextDay);
+  assert.equal(balance(undone), 25);
+  assert.equal(undone.rewards.some((r) => r.id === `goal:${day}:job`), true);
+  assert.equal(validateData(undone), true);
+});
+test("undoing the interview that completed the goal revokes it", () => {
+  let data = dataWith(task("cv", "resume", 15), task("iv", "interview"));
+  data = finishAll(data, ["cv", "iv"]);
+  assert.equal(balance(data), 30);
+  const undone = uncompleteTask(data, "iv", day);
+  assert.equal(balance(undone), 5);
+  assert.equal(weekStats(undone, day).jobComplete, false);
+  assert.equal(validateData(undone), true);
+});
+test("undoing an unrelated task never touches goal rewards", () => {
+  let data = finishAll(dataWith(task("cv", "resume", 15), task("hw", "course")), ["cv", "hw"]);
+  data = saveTask(data, task("late", "interview"), day);
+  assert.equal(balance(data), 30);
+  const undone = uncompleteTask(data, "hw", day);
+  assert.equal(balance(undone), 25);
+  assert.equal(undone.rewards.some((r) => r.id === `goal:${day}:job`), true);
+  assert.equal(validateData(undone), true);
+});
+test("undoing speaking and listening revokes only the unsupported part", () => {
+  let data = dataWith(
+    task("c", "cantonese", 2),
+    task("e", "english", 9),
+    task("l1", "listening", 10),
+    task("l2", "listening", 10),
+  );
+  data = finishAll(data, ["c", "e", "l1"]);
+  data = completeTask(data, "l2", nextDay);
+  assert.equal(balance(data), 50); // four tasks 20, goal 20, two listening tiers 10
+  const lessListening = uncompleteTask(data, "l2", nextDay);
+  assert.equal(balance(lessListening), 40);
+  assert.equal(validateData(lessListening), true);
+  const noGoal = uncompleteTask(lessListening, "e", day);
+  assert.equal(balance(noGoal), 10);
+  assert.equal(validateData(noGoal), true);
+});
+test("an undone weekly task returns to today's plan", () => {
+  let data = ensureWeek(emptyData(), day);
+  data = completeTask(data, auto("resume", 1), day);
+  assert.equal(dailyTasks(data, day).some((t) => t.id.includes("resume")), false);
+  data = uncompleteTask(data, auto("resume", 1), day);
+  assert.equal(dailyTasks(data, day)[0].id, auto("resume", 1));
 });

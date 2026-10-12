@@ -11,12 +11,14 @@ import {
 import {
   addDays,
   archiveTasks,
+  balance,
   CATEGORY,
   chooseDaily,
   dailyTasks,
   localDate,
   moveTasks,
   normalizeData,
+  uncompleteTask,
   validateData,
   weekStart,
 } from "./domain.ts";
@@ -151,7 +153,37 @@ export function TaskMenuSheet({
             <ArrowRight size={17} />
           </button>
         ) : (
-          <p>已完成并奖励5卡拉米。完成记录保留，不重复计分。</p>
+          <>
+            <p>已完成并奖励5卡拉米。完成记录保留，不重复计分。</p>
+            {data.completions.some(
+              (item) => item.taskId === task.id && item.date === today,
+            ) && (
+              <button
+                onClick={async () => {
+                  const date = localDate();
+                  if (
+                    !data.completions.some(
+                      (item) => item.taskId === task.id && item.date === date,
+                    )
+                  ) {
+                    notify("只能撤销今天完成的任务。");
+                    return;
+                  }
+                  const result = await update(
+                    (previous) => uncompleteTask(previous, task.id, date),
+                    base,
+                  );
+                  if (!result) return;
+                  const taken =
+                    balance(base.data) - balance(result.snapshot.data);
+                  close();
+                  notify(`已撤销完成，收回${taken}卡拉米。`);
+                }}
+              >
+                撤销完成<span>仅限今天完成的任务</span>
+              </button>
+            )}
+          </>
         )}
       </div>
     </Modal>
@@ -501,7 +533,9 @@ export function SettingsSheet({
         <p>
           每周自动在待办生成：香港秋招简历x5（3条）、英语面试练习3题（3条）、粤语30分钟（2条）。自动安排时，每日先放一条简历，再放普通任务，列表不到3条时加一条英语（英语做完后才轮到粤语）；同一系列每天只安排一条，英语和粤语不同天出现。手动安排时不套用这些规则。新的一周开始时，上周未完成的自动任务移入「已清空」，可恢复。
         </p>
-        <p>清空任务不扣积分。完成记录保留，奖励只发一次。</p>
+        <p>
+          清空任务不扣积分。完成记录保留，奖励只发一次。误点完成时，可在当天从任务菜单「撤销完成」，会收回这次完成带来的卡拉米；隔天后不能撤销。
+        </p>
       </div>
       <div className="settings-foot">
         <span className="wordmark">You Did!</span>

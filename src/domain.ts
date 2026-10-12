@@ -287,6 +287,46 @@ export function completeTask(data: AppData, id: string, date: string): AppData {
     date,
   );
 }
+// Undo is limited to completions made on `date` (today), so earlier days' ledger is
+// never rewritten. Goal and tier rewards are revoked only when they were granted
+// today and this completion's goal no longer qualifies; an unrelated undo, or a
+// later-added interview, cannot take back a reward this completion did not cause.
+export function uncompleteTask(
+  data: AppData,
+  id: string,
+  date: string,
+): AppData {
+  const record = data.completions.find((item) => item.taskId === id);
+  const task = data.tasks.find((item) => item.id === id);
+  if (!record || !task || record.date !== date || task.status !== "done")
+    return data;
+  const week = record.week;
+  const next: AppData = {
+    ...data,
+    tasks: data.tasks.map((item) =>
+      item.id === id ? { ...item, status: "open" } : item,
+    ),
+    completions: data.completions.filter((item) => item.taskId !== id),
+    rewards: data.rewards.filter((item) => item.id !== `task:${id}`),
+  };
+  const stats = weekStats(next, week);
+  const job = record.kind === "resume" || record.kind === "interview";
+  const speech = ["cantonese", "english", "listening"].includes(record.kind);
+  if (!job && !speech) return next;
+  const category = job ? "job" : "speech";
+  const goalLost = job
+    ? stats.resumes < 15 || (record.kind === "interview" && !stats.jobComplete)
+    : record.kind !== "listening" && (stats.cantonese < 2 || stats.english < 9);
+  const maxTier = job ? stats.jobTiers : stats.speechTiers;
+  const revoked = (reward: Reward) => {
+    if (reward.date !== date || reward.week !== week) return false;
+    if (reward.id === `goal:${week}:${category}`) return goalLost;
+    const prefix = `bonus:${week}:${category}:`;
+    if (!reward.id.startsWith(prefix)) return false;
+    return goalLost || Number(reward.id.slice(prefix.length)) > maxTier;
+  };
+  return { ...next, rewards: next.rewards.filter((item) => !revoked(item)) };
+}
 export function saveTask(data: AppData, task: Task, date: string): AppData {
   const existing = data.tasks.find((item) => item.id === task.id);
   if (existing && existing.status !== "open") return data;
