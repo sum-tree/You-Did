@@ -97,8 +97,8 @@ svg {
   box-shadow: 0 0 70px #39493614;
 }
 .app-header {
-  height: 79px;
-  padding: 22px 22px 16px;
+  height: calc(79px + env(safe-area-inset-top));
+  padding: calc(22px + env(safe-area-inset-top)) 22px 16px;
   display: flex;
   align-items: center;
   justify-content: space-between;

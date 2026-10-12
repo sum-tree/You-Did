@@ -32,6 +32,14 @@ npm.cmd run preview
 
 课程初始为第6/15周，可在设置中手动调整。每个粤语贡献单位代表一整次30分钟练习。目标以周一至周日计算。
 
+## iPhone 添加到主屏幕
+
+应用名称为 **You Did!**，主屏幕图标已采用用户选择的C「奖励星星」。网站部署完成后，用iPhone Safari打开正式HTTPS网址，选择「分享 → 添加到主屏幕」，若出现「作为网页App打开」则开启，再点「添加」。之后从桌面图标进入。
+
+应用清单设为`standalone`，配置了180px Apple触控图标及192px、512px应用图标，资源地址相对部署子路径。添加主屏幕不代表支持离线；本版仍需联网加载页面，尚未加入Service Worker离线缓存。未在真实iPhone上验收，部署后须检查图标、启动和刘海/底部安全区。
+
+三个原始候选与完整生成提示词保存在`docs/icon-options/`，使用内置image_gen生成。A为完成打勾、B为成长幼苗、C为奖励星星，用户已确认C。图标没有预先裁成圆角，交由iOS应用系统遮罩。
+
 ## 数据与跨设备迁移
 
 数据保存在浏览器 `localStorage`，初始任务和积分为空。应用不是云同步服务：不同浏览器、域名、主机名或端口的记录分别保存。例如 `localhost:5173`、`127.0.0.1:5173` 和正式部署网址属于不同存储空间。
@@ -44,14 +52,14 @@ npm.cmd run preview
 
 运行 `npm.cmd run build` 后，把 `dist/` 目录部署到支持静态文件的服务即可。推荐配置：构建命令 `npm run build`、输出目录 `dist`、Node.js版本24。
 
-- GitHub Pages：使用仓库提供的 `.github/workflows/deploy.yml`。在仓库 **Settings → Pages → Source** 选择 **GitHub Actions**，然后从 Actions 手动运行 **Deploy GitHub Pages**。该流程只由手动操作触发，不会在本次创建时上传或部署。
+- GitHub Pages：使用仓库提供的 `.github/workflows/deploy.yml`。在仓库 **Settings → Pages → Source** 选择 **GitHub Actions**，然后从 Actions 手动运行 **Deploy GitHub Pages**。该流程只由手动操作触发，不会因push自动部署。
 - 其他静态托管：上传 `dist` 或设置上述构建命令与输出目录。
 
 Vite 配置使用相对资源路径，兼容 GitHub Pages 的仓库子路径。四个页面在应用内切换，没有需要服务器重写的深层路由。部署到手机可访问的网址后直接在手机浏览器使用；本地开发服务默认只监听本机，不向局域网公开。
 
 ## GitHub 仓库
 
-源码、锁文件、产品文档和工作流均可提交。`node_modules/`、`dist/`、npm缓存和运行日志被忽略。项目当前分支为 Git 默认初始化的 `master`，无需为继续开发切换分支。尚未关联远程仓库，也没有自动 push。
+源码、锁文件、产品文档和工作流均可提交。`node_modules/`、`dist/`、npm缓存和运行日志被忽略。项目当前分支为 Git 默认初始化的 `master`，无需为继续开发切换分支。远程仓库为 [sum-tree/You-Did](https://github.com/sum-tree/You-Did)，后续push须由用户明确授权。
 
 如果 E: 盘出现 `dubious ownership`，可仅对这次命令加精确目录参数：
 

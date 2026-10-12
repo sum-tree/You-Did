@@ -1,0 +1,19 @@
+{
+  "applicationName": "You Did!",
+  "generator": "built-in image_gen",
+  "selectedOption": "c",
+  "options": [
+    {
+      "key": "a",
+      "prompt": "Use case: logo-brand. Asset type: iOS home-screen app icon candidate A for a warm motivational productivity app named You Did! Primary request: create one finished square bitmap app icon, not a presentation or phone mockup. Subject: a single bold, friendly deep forest-green check mark, with one small four-point celebration sparkle at its upper right. Style: extremely clean sculpted soft-matte emblem, warm and confident, simple rounded thick strokes, restrained tactile depth and a very soft shadow. Background: full-bleed opaque warm peach #F3C4A2 across the entire square, no outer border or pre-rounded app tile. Composition: centered bold symbol occupying about 65 percent of the canvas; generous safe margins suitable for iOS rounded-square masking; legible at 48 pixels. Palette: peach, deep forest green #303A32, tiny warm-cream sparkle. No text, letters, numbers, label A, watermark, frame, gradients with busy texture, app screens or extra symbols. Output exactly one square icon."
+    },
+    {
+      "key": "b",
+      "prompt": "Use case: logo-brand. Asset type: iOS home-screen app icon candidate B for a warm motivational productivity app named You Did! Primary request: create one finished square bitmap app icon, not a presentation or phone mockup. Subject: a charming compact sprout growing from a simple terracotta pot; two large rounded sage-green leaves and one short deep green stem whose curved gesture subtly suggests a check mark. It symbolizes small daily steps and growth. Style: polished minimal clay illustration, clean bold silhouette, restrained matte dimensionality, warm and calm, no face. Background: full-bleed opaque warm cream #F8F7F2, no outer frame or pre-rounded tile. Composition: one centered large sprout-and-pot emblem with safe margins for the iOS icon mask, simple enough to read at 48 pixels. Palette: sage green, deep forest green #303A32, warm terracotta #C98261. Avoid small decoration, multiple plants, text, letters, label B, watermark, border, photo realism, phone mockup or interface. Output exactly one square icon."
+    },
+    {
+      "key": "c",
+      "prompt": "Use case: logo-brand. Asset type: iOS home-screen app icon candidate C for a warm motivational productivity app named You Did! Primary request: create one finished square bitmap app icon, not a presentation or phone mockup. Subject: one chunky rounded five-point golden achievement star with a bold warm-cream check mark embossed in its center. It celebrates a small task completed and the app's reward coins. Style: premium soft-matte three-dimensional clay emblem, visually simple and friendly, lightly beveled forms, one gentle shadow, no face and no shiny metallic reflections. Background: full-bleed opaque deep sage green #53664D across the entire square, no pre-rounded tile or outer border. Composition: one centered large reward-star emblem, about 68 percent canvas width, generous safe margins for iOS masking, very legible at 48 pixels. Palette: muted honey gold, warm cream, deep sage. No letters, text, numbers, label C, watermark, confetti, multiple icons, frame, ribbon, phone screen or interface. Output exactly one square icon."
+    }
+  ]
+}
