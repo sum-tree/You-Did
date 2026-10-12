@@ -9,6 +9,7 @@ import {
   dailyTasks,
   dailyView,
   emptyData,
+  ensureWeek,
   inferContribution,
   localDate,
   moveTasks,
@@ -450,4 +451,99 @@ test("task titles determine the goal contribution and quantity", () => {
   ];
   for (const [title, category, kind, amount] of cases)
     assert.deepEqual(inferContribution(title, category), { kind, amount }, title);
+});
+const nextDay = "2026-10-13";
+const auto = (series, n, week = day) => `auto:${week}:${series}:${n}`;
+test("each week generates the eight fixed tasks once", () => {
+  const data = ensureWeek(emptyData(), nextDay);
+  assert.equal(data.autoWeek, day);
+  assert.deepEqual(
+    data.tasks.map((t) => [t.id, t.title, t.kind, t.amount, t.plannedWeek]),
+    [
+      [auto("resume", 1), "香港秋招简历x5", "resume", 5, day],
+      [auto("resume", 2), "香港秋招简历x5", "resume", 5, day],
+      [auto("resume", 3), "香港秋招简历x5", "resume", 5, day],
+      [auto("english", 1), "英语面试练习3题", "english", 3, day],
+      [auto("english", 2), "英语面试练习3题", "english", 3, day],
+      [auto("english", 3), "英语面试练习3题", "english", 3, day],
+      [auto("cantonese", 1), "粤语30分钟", "cantonese", 1, day],
+      [auto("cantonese", 2), "粤语30分钟", "cantonese", 1, day],
+    ],
+  );
+  assert.equal(ensureWeek(data, "2026-10-18"), data);
+  assert.equal(validateData(data), true);
+  const cleared = archiveTasks(data, [auto("resume", 3)]);
+  assert.equal(ensureWeek(cleared, day), cleared);
+});
+test("a new week clears last week's open generated tasks but keeps records", () => {
+  let data = ensureWeek(emptyData(), day);
+  data = completeTask(data, auto("resume", 1), day);
+  data = saveTask(data, task("mine"), day);
+  const next = ensureWeek(data, "2026-10-19");
+  const status = (id) => next.tasks.find((t) => t.id === id).status;
+  assert.equal(status(auto("resume", 1)), "done");
+  assert.equal(status(auto("resume", 2)), "archived");
+  assert.equal(status(auto("cantonese", 2)), "archived");
+  assert.equal(status("mine"), "open");
+  assert.equal(next.tasks.filter((t) => t.plannedWeek === "2026-10-19").length, 8);
+  assert.equal(balance(next), balance(data));
+  assert.equal(validateData(next), true);
+  const restored = {
+    ...next,
+    tasks: next.tasks.map((t) =>
+      t.id === auto("resume", 2) ? { ...t, status: "open" } : t,
+    ),
+  };
+  assert.equal(ensureWeek(restored, "2026-10-20"), restored);
+});
+test("daily plan: resume first, ordinary tasks next, then one speech task", () => {
+  let data = ensureWeek(dataWith(task("a", "none", 1, { priority: 0 }), task("b")), day);
+  assert.deepEqual(
+    dailyTasks(data, day).map((t) => t.id),
+    [auto("resume", 1), "a", auto("english", 1)],
+  );
+  data = ensureWeek(emptyData(), day);
+  assert.deepEqual(
+    dailyTasks(data, day).map((t) => t.id),
+    [auto("resume", 1), auto("english", 1)],
+  );
+});
+test("each series appears once a day and Cantonese waits for English", () => {
+  let data = ensureWeek(emptyData(), day);
+  data = finishAll(data, [auto("resume", 1), auto("english", 1)]);
+  assert.deepEqual(dailyTasks(data, day), []);
+  assert.deepEqual(
+    dailyView(data, day).map((t) => t.id),
+    [auto("resume", 1), auto("english", 1)],
+  );
+  assert.deepEqual(
+    dailyTasks(data, nextDay).map((t) => t.id),
+    [auto("resume", 2), auto("english", 2)],
+  );
+  data = finishAll(data, [auto("english", 2), auto("english", 3)], nextDay);
+  assert.deepEqual(
+    dailyTasks(data, "2026-10-14").map((t) => t.id),
+    [auto("resume", 2), auto("cantonese", 1)],
+  );
+});
+test("resume stays guaranteed when ordinary tasks are overdue", () => {
+  const data = ensureWeek(
+    dataWith(
+      ...[1, 2, 3].map((i) => task(`u${i}`, "none", 1, { dueDate: addDays(day, -i) })),
+    ),
+    day,
+  );
+  assert.deepEqual(
+    dailyTasks(data, day).map((t) => t.id),
+    [auto("resume", 1), "u3", "u2"],
+  );
+});
+test("manual planning ignores the weekly series rules", () => {
+  const data = chooseDaily(ensureWeek(dataWith(task("a")), day), day, ["a"]);
+  assert.deepEqual(dailyTasks(data, day).map((t) => t.id), ["a"]);
+});
+test("generated titles keep their quantity when re-inferred", () => {
+  assert.deepEqual(inferContribution("香港秋招简历x5", "job"), { kind: "resume", amount: 5 });
+  assert.deepEqual(inferContribution("英语面试练习3题", "speech"), { kind: "english", amount: 3 });
+  assert.deepEqual(inferContribution("粤语30分钟", "speech"), { kind: "cantonese", amount: 1 });
 });

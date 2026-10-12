@@ -51,6 +51,8 @@ export interface AppData {
   daily: Record<string, string[]>;
   events: CalendarEvent[];
   courseWeek: number;
+  // Week whose generated tasks were created and whose predecessors were cleared.
+  autoWeek?: string;
 }
 export const CATEGORY: Record<Category, { name: string; short: string }> = {
   job: { name: "香港揾工", short: "揾工" },
@@ -83,12 +85,19 @@ export function inferContribution(
     const match = new RegExp(`(\\d+)\\s*(?:${unit.source})`, "i").exec(title);
     return match ? Math.min(10000, Math.max(1, Number(match[1]))) : 0;
   };
+  const times = () => {
+    const match = /[x×*]\s*(\d+)/i.exec(title);
+    return match ? Math.min(10000, Math.max(1, Number(match[1]))) : 0;
+  };
   const one = (kind: Contribution) => ({ kind, amount: 1 });
   if (category === "course") return one("course");
   if (category === "job") {
     if (/面试|测试|笔试|interview/i.test(title)) return one("interview");
     if (/简历|投递|cv|resume/i.test(title))
-      return { kind: "resume", amount: count(/份|封|个|家/) || 1 };
+      return {
+        kind: "resume",
+        amount: count(/份|封|个|家/) || times() || 1,
+      };
     return one("none");
   }
   if (/听力|listening/i.test(title))
@@ -351,6 +360,70 @@ function prioritySort(a: Task, b: Task) {
     a.id.localeCompare(b.id)
   );
 }
+export const WEEKLY_TASKS = [
+  {
+    series: "resume",
+    title: "香港秋招简历x5",
+    category: "job",
+    kind: "resume",
+    amount: 5,
+    count: 3,
+  },
+  {
+    series: "english",
+    title: "英语面试练习3题",
+    category: "speech",
+    kind: "english",
+    amount: 3,
+    count: 3,
+  },
+  {
+    series: "cantonese",
+    title: "粤语30分钟",
+    category: "speech",
+    kind: "cantonese",
+    amount: 1,
+    count: 2,
+  },
+] as const;
+type Series = (typeof WEEKLY_TASKS)[number]["series"];
+function seriesOf(id: string): Series | undefined {
+  return /^auto:\d{4}-\d{2}-\d{2}:(resume|english|cantonese):\d+$/.exec(
+    id,
+  )?.[1] as Series | undefined;
+}
+export const isGenerated = (task: Task) => seriesOf(task.id) !== undefined;
+// Runs once per week: archives earlier generated tasks still open (the Sunday-midnight
+// clear), then creates this week's set. IDs and timestamps are deterministic so
+// concurrent tabs write identical records. Restored or archived ones are left alone.
+export function ensureWeek(data: AppData, date: string): AppData {
+  const week = weekStart(date);
+  if (data.autoWeek && data.autoWeek >= week) return data;
+  const existing = new Set(data.tasks.map((task) => task.id));
+  const tasks: Task[] = data.tasks.map((task) =>
+    isGenerated(task) && task.status === "open" && task.plannedWeek < week
+      ? { ...task, status: "archived" }
+      : task,
+  );
+  for (const item of WEEKLY_TASKS)
+    for (let n = 1; n <= item.count; n++) {
+      const id = `auto:${week}:${item.series}:${n}`;
+      if (existing.has(id)) continue;
+      tasks.push({
+        id,
+        title: item.title,
+        category: item.category,
+        priority: 1,
+        dueDate: "",
+        plannedWeek: week,
+        kind: item.kind,
+        amount: item.amount,
+        status: "open",
+        createdAt: `${week}T00:00:00`,
+      });
+    }
+  return { ...data, tasks, autoWeek: week };
+}
 // Open tasks planned up to this week, or already due, may be placed on a day.
 export function schedulable(task: Task, date: string): boolean {
   return (
@@ -373,13 +446,40 @@ export function dailyTasks(data: AppData, date: string): Task[] {
       .filter((task): task is Task => Boolean(task))
       .slice(0, 3);
   }
-  const picked = urgent.slice(0, 3);
-  for (const task of [...open]
-    .filter((task) => task.plannedWeek === currentWeek)
-    .sort(prioritySort)) {
-    if (picked.length >= Math.max(2, Math.min(urgent.length, 3))) break;
-    if (!picked.some((item) => item.id === task.id)) picked.push(task);
+  // Generated series: one task per series per day; resume is guaranteed, then
+  // ordinary tasks fill to two, then English (else Cantonese) if a slot is left.
+  const doneToday = new Set(
+    data.completions
+      .filter((item) => item.date === date)
+      .map((item) => seriesOf(item.taskId)),
+  );
+  const next = (series: Series) =>
+    doneToday.has(series)
+      ? undefined
+      : open
+          .filter(
+            (task) =>
+              seriesOf(task.id) === series && task.plannedWeek === currentWeek,
+          )
+          .sort((a, b) => a.id.localeCompare(b.id))[0];
+  const picked: Task[] = [];
+  const resume = next("resume");
+  if (resume) picked.push(resume);
+  for (const task of urgent.filter((task) => !isGenerated(task))) {
+    if (picked.length >= 3) break;
+    picked.push(task);
   }
+  for (const task of open
+    .filter((task) => !isGenerated(task) && task.plannedWeek === currentWeek)
+    .sort(prioritySort)) {
+    if (picked.length >= 2) break;
+    if (!picked.includes(task)) picked.push(task);
+  }
+  const speaking =
+    doneToday.has("english") || doneToday.has("cantonese")
+      ? undefined
+      : (next("english") ?? next("cantonese"));
+  if (speaking && picked.length < 3) picked.push(speaking);
   return picked;
 }
 // Open core tasks first, then tasks actually completed that day; each ID appears once.
@@ -457,6 +557,7 @@ export function normalizeData(data: AppData): AppData {
       note: e.note,
     })),
     courseWeek: data.courseWeek,
+    ...(data.autoWeek ? { autoWeek: data.autoWeek } : {}),
   };
 }
 export function validateData(value: unknown): value is AppData {
@@ -486,7 +587,9 @@ export function validateData(value: unknown): value is AppData {
     d.courseWeek > 15 ||
     !d.daily ||
     typeof d.daily !== "object" ||
-    Array.isArray(d.daily)
+    Array.isArray(d.daily) ||
+    (d.autoWeek !== undefined &&
+      !(validDate(d.autoWeek) && weekStart(d.autoWeek) === d.autoWeek))
   )
     return false;
   if (

@@ -29,6 +29,7 @@ import {
   dailyTasks,
   dailyView,
   dateObject,
+  ensureWeek,
   KIND,
   localDate,
   moveTasks,
@@ -241,6 +242,24 @@ export default function App() {
       document.removeEventListener("visibilitychange", synchronize);
     };
   }, []);
+  useEffect(() => {
+    // Weekly generation is the only write without a user action. It is idempotent:
+    // on a conflict the newer record is accepted and this effect re-checks it.
+    if (blocked || saving.current) return;
+    if (ensureWeek(snapshot.current.data, today) === snapshot.current.data)
+      return;
+    saving.current = true;
+    void saveChange(store, navigator.locks, snapshot.current, (previous) =>
+      ensureWeek(previous, today),
+    )
+      .then((result) => {
+        if (result.status === "error") setSaveIssue(result.message);
+        else accept(result.snapshot);
+      })
+      .finally(() => {
+        saving.current = false;
+      });
+  }, [today, data, blocked]);
   async function finish(task: Task) {
     if (!canChange()) return;
     const date = localDate();
@@ -1196,11 +1215,14 @@ export default function App() {
             <p>
               成就页的进度按两个子目标各占一半计算。香港揾工：本周投递15份简历，且本周安排的测试/面试全部完成；本周没有面试安排时这一半视为已满足，所以只差简历时显示50%。临时新增面试会让进度下降，但已发奖励不收回。提前完成的面试计入原计划周。大胆说口语：粤语30分钟×2次，以及英语面试题×9题。
             </p>
+            <p>
+              每周自动在待办生成：香港秋招简历x5（3条）、英语面试练习3题（3条）、粤语30分钟（2条）。自动安排时，每日先放一条简历，再放普通任务，列表不到3条时加一条英语（英语做完后才轮到粤语）；同一系列每天只安排一条，英语和粤语不同天出现。手动安排时不套用这些规则。新的一周开始时，上周未完成的自动任务移入「已清空」，可恢复。
+            </p>
             <p>清空任务不扣积分。完成记录保留，奖励只发一次。</p>
           </div>
           <div className="settings-foot">
             <span className="wordmark">You Did!</span>
-            <span>v0.3</span>
+            <span>v0.4</span>
           </div>
         </Modal>
       )}
