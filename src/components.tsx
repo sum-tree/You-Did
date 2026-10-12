@@ -1,10 +1,18 @@
 import { useEffect, useId, useRef, useState } from "react";
 import type { FormEvent, ReactNode } from "react";
-import { BookOpen, BriefcaseBusiness, Mic, Plus, X } from "lucide-react";
+import {
+  BookOpen,
+  BriefcaseBusiness,
+  Check,
+  Mic,
+  Plus,
+  X,
+} from "lucide-react";
 import {
   CATEGORY,
   dateObject,
   inferContribution,
+  KIND,
   weekStart,
 } from "./domain.ts";
 import type { CalendarEvent, Category, Task } from "./domain.ts";
@@ -14,6 +22,35 @@ export const shortDate = (date: string) =>
     month: "numeric",
     day: "numeric",
   });
+export const longDate = (date: string, weekday = false) =>
+  dateObject(date).toLocaleDateString("zh-CN", {
+    month: "long",
+    day: "numeric",
+    ...(weekday ? { weekday: "long" } : {}),
+  });
+export const eventKind = (kind: CalendarEvent["kind"]) =>
+  kind === "interview" ? "面试 / 测试" : kind === "deadline" ? "重要DDL" : "提醒";
+export const contributionLabel = (task: Task) =>
+  `${KIND[task.kind].label.split("（")[0]} · ${task.amount}${KIND[task.kind].unit}`;
+export function TaskCheck({
+  task,
+  onFinish,
+}: {
+  task: Task;
+  onFinish: (task: Task) => void;
+}) {
+  const done = task.status === "done";
+  return (
+    <button
+      className={`task-check ${done ? "checked" : ""}`}
+      aria-label={`${done ? "已完成" : "完成"}：${task.title}`}
+      disabled={task.status !== "open"}
+      onClick={() => onFinish(task)}
+    >
+      {done && <Check size={17} />}
+    </button>
+  );
+}
 export const dateLabel = (date: string, today: string) =>
   !date
     ? "无截止日期"
