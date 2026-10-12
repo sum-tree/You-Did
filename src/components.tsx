@@ -1,15 +1,14 @@
 import { useEffect, useId, useRef, useState } from "react";
 import type { FormEvent, ReactNode } from "react";
+import { BookOpen, BriefcaseBusiness, Mic, Plus, X } from "lucide-react";
 import {
-  BookOpen,
-  BriefcaseBusiness,
-  Coins,
-  Mic,
-  Plus,
-  X,
-} from "lucide-react";
-import { addDays, CATEGORY, dateObject, KIND, weekStart } from "./domain.ts";
-import type { CalendarEvent, Category, Contribution, Task } from "./domain.ts";
+  CATEGORY,
+  dateObject,
+  inferContribution,
+  KIND,
+  weekStart,
+} from "./domain.ts";
+import type { CalendarEvent, Category, Task } from "./domain.ts";
 
 export const shortDate = (date: string) =>
   dateObject(date).toLocaleDateString("zh-CN", {
@@ -131,11 +130,8 @@ export function TaskForm({
   const [category, setCategory] = useState<Category>(
     existing?.category ?? "job",
   );
-  const [kind, setKind] = useState<Contribution>(existing?.kind ?? "resume");
-  const [amount, setAmount] = useState(existing?.amount ?? 1);
-  const [plannedWeek, setPlannedWeek] = useState(
-    existing?.plannedWeek ?? weekStart(today),
-  );
+  const [title, setTitle] = useState(existing?.title ?? "");
+  const detected = inferContribution(title.trim(), category);
   const submit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const fields = new FormData(event.currentTarget);
@@ -155,12 +151,9 @@ export function TaskForm({
         category,
         priority: Number(fields.get("priority")) as 0 | 1 | 2,
         dueDate: String(fields.get("dueDate")),
-        plannedWeek,
-        kind,
-        amount:
-          kind === "interview" || kind === "none" || kind === "course"
-            ? 1
-            : amount,
+        // New tasks start in this week; use "移至下周" to plan ahead.
+        plannedWeek: existing?.plannedWeek ?? weekStart(today),
+        ...inferContribution(title, category),
         status: "open",
         createdAt: existing?.createdAt ?? new Date().toISOString(),
       },
@@ -174,31 +167,30 @@ export function TaskForm({
         <input
           name="title"
           aria-label="任务名称"
+          aria-describedby="task-goal"
           required
           maxLength={200}
           placeholder="例如：投递3份心仪的岗位"
-          defaultValue={existing?.title}
-          onInput={(e) => e.currentTarget.setCustomValidity("")}
+          value={title}
+          onChange={(e) => {
+            e.currentTarget.setCustomValidity("");
+            setTitle(e.target.value);
+          }}
           autoFocus
         />
+        <small className="field-hint" id="task-goal">
+          计入：
+          {detected.kind === "none"
+            ? "不计目标量"
+            : `${KIND[detected.kind].label.split("（")[0]} · ${detected.amount}${KIND[detected.kind].unit}`}
+        </small>
       </label>
       <label>
         任务类型
         <select
           aria-label="任务类型"
           value={category}
-          onChange={(e) => {
-            const next = e.target.value as Category;
-            setCategory(next);
-            setKind(
-              next === "job"
-                ? "resume"
-                : next === "speech"
-                  ? "cantonese"
-                  : "course",
-            );
-            setAmount(1);
-          }}
+          onChange={(e) => setCategory(e.target.value as Category)}
         >
           {Object.entries(CATEGORY).map(([key, value]) => (
             <option key={key} value={key}>
@@ -207,49 +199,13 @@ export function TaskForm({
           ))}
         </select>
       </label>
-      <label>
-        计入哪个目标？
-        <select
-          aria-label="目标贡献"
-          value={kind}
-          onChange={(e) => {
-            setKind(e.target.value as Contribution);
-            setAmount(1);
-          }}
-        >
-          {Object.entries(KIND)
-            .filter(
-              ([, value]) => !value.category || value.category === category,
-            )
-            .map(([key, value]) => (
-              <option key={key} value={key}>
-                {value.label}
-              </option>
-            ))}
-        </select>
-      </label>
-      {!["interview", "course", "none"].includes(kind) && (
-        <label>
-          完成量（{KIND[kind].unit}）
-          <input
-            aria-label="完成量"
-            type="number"
-            min={1}
-            max={10000}
-            step={1}
-            required
-            value={amount}
-            onChange={(e) => setAmount(Number(e.target.value))}
-          />
-        </label>
-      )}
       <div className="form-row">
         <label>
           优先级
           <select name="priority" defaultValue={existing?.priority ?? 1}>
-            <option value="0">P0 · 优先完成</option>
-            <option value="1">P1 · 正常安排</option>
-            <option value="2">P2 · 不着急</option>
+            <option value="0">P0</option>
+            <option value="1">P1</option>
+            <option value="2">P2</option>
           </select>
         </label>
         <label>
@@ -263,39 +219,12 @@ export function TaskForm({
           />
         </label>
       </div>
-      <label>
-        计划周
-        <select
-          aria-label="计划周"
-          value={plannedWeek}
-          onChange={(e) => setPlannedWeek(e.target.value)}
-        >
-          {existing &&
-            ![weekStart(today), addDays(weekStart(today), 7)].includes(
-              existing.plannedWeek,
-            ) && (
-              <option value={existing.plannedWeek}>
-                原计划 · {shortDate(existing.plannedWeek)}起
-              </option>
-            )}
-          <option value={weekStart(today)}>
-            本周 · {shortDate(weekStart(today))}起
-          </option>
-          <option value={addDays(weekStart(today), 7)}>
-            下周 · {shortDate(addDays(weekStart(today), 7))}起
-          </option>
-        </select>
-      </label>
-      {!existing && plannedWeek <= weekStart(today) && (
+      {!existing && (
         <label className="checkbox-label">
           <input name="today" type="checkbox" />
           加入今日核心任务
         </label>
       )}
-      <p className="form-note">
-        <Coins size={15} />
-        完成后获得5卡拉米。目标量在完成时计入当周。
-      </p>
       <button className="primary" type="submit">
         {existing ? "保存修改" : "添加任务"}
         <Plus size={18} />

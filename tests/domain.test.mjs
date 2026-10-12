@@ -9,6 +9,7 @@ import {
   dailyTasks,
   dailyView,
   emptyData,
+  inferContribution,
   localDate,
   moveTasks,
   normalizeData,
@@ -432,4 +433,21 @@ test("today's view keeps completed tasks checked in the same list without using 
   );
   assert.equal(new Set(view.map((t) => t.id)).size, view.length);
   assert.ok(view.filter((t) => t.status === "open").length <= 3);
+});
+test("task titles determine the goal contribution and quantity", () => {
+  const cases = [
+    ["投递3份简历", "job", "resume", 3],
+    ["改简历", "job", "resume", 1],
+    ["准备汇丰面试", "job", "interview", 1],
+    ["完成在线测试", "job", "interview", 1],
+    ["整理求职笔记", "job", "none", 1],
+    ["粤语练习2次", "speech", "cantonese", 2],
+    ["粤语对话60分钟", "speech", "cantonese", 2],
+    ["粤语听力20分钟", "speech", "listening", 20],
+    ["英语面试题 9题", "speech", "english", 9],
+    ["背单词", "speech", "none", 1],
+    ["统计作业 Week 6 交3份报告", "course", "course", 1],
+  ];
+  for (const [title, category, kind, amount] of cases)
+    assert.deepEqual(inferContribution(title, category), { kind, amount }, title);
 });

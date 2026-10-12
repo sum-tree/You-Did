@@ -73,6 +73,38 @@ export const KIND: Record<
   course: { label: "课程 / 作业任务", unit: "项", category: "course" },
   none: { label: "普通任务（不计目标量）", unit: "项", category: null },
 };
+// The form has no contribution picker: keywords in the title choose the goal,
+// and a number next to that goal's unit sets the quantity (default 1).
+export function inferContribution(
+  title: string,
+  category: Category,
+): { kind: Contribution; amount: number } {
+  const count = (unit: RegExp) => {
+    const match = new RegExp(`(\\d+)\\s*(?:${unit.source})`, "i").exec(title);
+    return match ? Math.min(10000, Math.max(1, Number(match[1]))) : 0;
+  };
+  const one = (kind: Contribution) => ({ kind, amount: 1 });
+  if (category === "course") return one("course");
+  if (category === "job") {
+    if (/面试|测试|笔试|interview/i.test(title)) return one("interview");
+    if (/简历|投递|cv|resume/i.test(title))
+      return { kind: "resume", amount: count(/份|封|个|家/) || 1 };
+    return one("none");
+  }
+  if (/听力|listening/i.test(title))
+    return {
+      kind: "listening",
+      amount: count(/分钟|min/) || count(/小时|h/) * 60 || 1,
+    };
+  if (/粤语|cantonese/i.test(title))
+    return {
+      kind: "cantonese",
+      amount: count(/次/) || Math.max(1, Math.floor(count(/分钟|min/) / 30)),
+    };
+  if (/英语|面试题|english/i.test(title))
+    return { kind: "english", amount: count(/题|道/) || 1 };
+  return one("none");
+}
 export function localDate(date = new Date()): string {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
 }
