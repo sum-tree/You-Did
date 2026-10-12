@@ -125,14 +125,23 @@ export function weekStats(data: AppData, week: string) {
       .map((item) => item.taskId),
   );
   // Cross-week work belongs to the completion week; archived interviews are not completions.
-  const interviewIds = new Set([
-    ...data.tasks
-      .filter((task) => task.kind === "interview" && task.plannedWeek === week)
-      .map((task) => task.id),
-    ...completedIds,
-  ]);
-  const interviewDone = [...interviewIds].filter((id) =>
-    completedIds.has(id),
+  const planned = data.tasks
+    .filter((task) => task.kind === "interview" && task.plannedWeek === week)
+    .map((task) => task.id);
+  const interviewIds = new Set([...planned, ...completedIds]);
+  // Finishing a planned interview early also satisfies its planned week; late completion does not.
+  const earlyIds = new Set(
+    data.completions
+      .filter(
+        (item) =>
+          item.kind === "interview" &&
+          item.week < week &&
+          planned.includes(item.taskId),
+      )
+      .map((item) => item.taskId),
+  );
+  const interviewDone = [...interviewIds].filter(
+    (id) => completedIds.has(id) || earlyIds.has(id),
   ).length;
   const resumes = sum("resume");
   const cantonese = sum("cantonese");
@@ -262,29 +271,45 @@ export function archiveTasks(data: AppData, ids: string[]): AppData {
   };
 }
 export function moveTasks(data: AppData, ids: string[], date: string): AppData {
-  const nextWeek = addDays(weekStart(date), 7);
-  return {
-    ...data,
-    tasks: data.tasks.map((task) =>
-      ids.includes(task.id) && task.status === "open"
-        ? {
-            ...task,
-            plannedWeek: nextWeek,
-            dueDate: task.dueDate
-              ? task.dueDate < nextWeek
-                ? nextWeek
-                : task.dueDate
-              : "",
-          }
-        : task,
-    ),
-    daily: Object.fromEntries(
-      Object.entries(data.daily).map(([day, selected]) => [
-        day,
-        selected.filter((id) => !ids.includes(id)),
-      ]),
-    ),
-  };
+  const week = weekStart(date);
+  const nextWeek = addDays(week, 7);
+  const moved = new Set(
+    data.tasks
+      .filter(
+        (task) =>
+          ids.includes(task.id) &&
+          task.status === "open" &&
+          task.plannedWeek < nextWeek,
+      )
+      .map((task) => task.id),
+  );
+  // Moving an open interview away can complete this week's goal; past weeks are never re-settled.
+  return settleRewards(
+    {
+      ...data,
+      tasks: data.tasks.map((task) =>
+        moved.has(task.id)
+          ? {
+              ...task,
+              plannedWeek: nextWeek,
+              dueDate: task.dueDate
+                ? task.dueDate < nextWeek
+                  ? nextWeek
+                  : task.dueDate
+                : "",
+            }
+          : task,
+      ),
+      daily: Object.fromEntries(
+        Object.entries(data.daily).map(([day, selected]) => [
+          day,
+          selected.filter((id) => !moved.has(id)),
+        ]),
+      ),
+    },
+    week,
+    date,
+  );
 }
 function prioritySort(a: Task, b: Task) {
   return (
@@ -294,14 +319,17 @@ function prioritySort(a: Task, b: Task) {
     a.id.localeCompare(b.id)
   );
 }
+// Open tasks planned up to this week, or already due, may be placed on a day.
+export function schedulable(task: Task, date: string): boolean {
+  return (
+    task.status === "open" &&
+    (task.plannedWeek <= weekStart(date) ||
+      (!!task.dueDate && task.dueDate <= date))
+  );
+}
 export function dailyTasks(data: AppData, date: string): Task[] {
   const currentWeek = weekStart(date);
-  const open = data.tasks.filter(
-    (task) =>
-      task.status === "open" &&
-      (task.plannedWeek <= currentWeek ||
-        (task.dueDate && task.dueDate <= date)),
-  );
+  const open = data.tasks.filter((task) => schedulable(task, date));
   const urgent = open
     .filter((task) => task.dueDate && task.dueDate <= date)
     .sort((a, b) => a.dueDate.localeCompare(b.dueDate) || prioritySort(a, b));
@@ -322,6 +350,19 @@ export function dailyTasks(data: AppData, date: string): Task[] {
   }
   return picked;
 }
+// Open core tasks first, then tasks actually completed that day; each ID appears once.
+export function dailyView(data: AppData, date: string): Task[] {
+  const view = dailyTasks(data, date);
+  const seen = new Set(view.map((task) => task.id));
+  const tasks = new Map(data.tasks.map((task) => [task.id, task]));
+  for (const item of data.completions) {
+    const task = tasks.get(item.taskId);
+    if (item.date !== date || !task || seen.has(task.id)) continue;
+    seen.add(task.id);
+    view.push(task);
+  }
+  return view;
+}
 export function chooseDaily(
   data: AppData,
   date: string,
@@ -329,12 +370,7 @@ export function chooseDaily(
 ): AppData {
   const eligible = new Set(
     data.tasks
-      .filter(
-        (task) =>
-          task.status === "open" &&
-          (task.plannedWeek <= weekStart(date) ||
-            (task.dueDate && task.dueDate <= date)),
-      )
+      .filter((task) => schedulable(task, date))
       .map((task) => task.id),
   );
   return {
@@ -343,6 +379,52 @@ export function chooseDaily(
       ...data.daily,
       [date]: [...new Set(ids)].filter((id) => eligible.has(id)).slice(0, 3),
     },
+  };
+}
+// Backups may carry unknown fields; persist only the validated schema.
+export function normalizeData(data: AppData): AppData {
+  return {
+    version: 1,
+    tasks: data.tasks.map((t) => ({
+      id: t.id,
+      title: t.title,
+      category: t.category,
+      priority: t.priority,
+      dueDate: t.dueDate,
+      plannedWeek: t.plannedWeek,
+      kind: t.kind,
+      amount: t.amount,
+      status: t.status,
+      createdAt: t.createdAt,
+    })),
+    completions: data.completions.map((c) => ({
+      taskId: c.taskId,
+      title: c.title,
+      category: c.category,
+      kind: c.kind,
+      amount: c.amount,
+      date: c.date,
+      week: c.week,
+    })),
+    rewards: data.rewards.map((r) => ({
+      id: r.id,
+      amount: r.amount,
+      label: r.label,
+      date: r.date,
+      week: r.week,
+    })),
+    daily: Object.fromEntries(
+      Object.entries(data.daily).map(([date, ids]) => [date, [...ids]]),
+    ),
+    events: data.events.map((e) => ({
+      id: e.id,
+      title: e.title,
+      date: e.date,
+      time: e.time,
+      kind: e.kind,
+      note: e.note,
+    })),
+    courseWeek: data.courseWeek,
   };
 }
 export function validateData(value: unknown): value is AppData {

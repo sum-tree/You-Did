@@ -7,9 +7,11 @@ import {
   chooseDaily,
   completeTask,
   dailyTasks,
+  dailyView,
   emptyData,
   localDate,
   moveTasks,
+  normalizeData,
   saveTask,
   settleRewards,
   validateData,
@@ -359,4 +361,75 @@ test("single-unit contribution kinds reject unsupported backup amounts", () => {
   for (const kind of ["interview", "course", "none"]) {
     assert.equal(validateData(dataWith(task("a", kind, 2))), false);
   }
+});
+
+test("an interview completed before its planned week satisfies that week", () => {
+  const next = "2026-10-19";
+  let data = dataWith(
+    task("early", "interview", 1, { plannedWeek: next }),
+    task("cv", "resume", 15, { plannedWeek: next }),
+  );
+  data = completeTask(data, "early", "2026-10-13");
+  data = completeTask(data, "cv", "2026-10-20");
+  assert.equal(weekStats(data, next).interviewDone, 1);
+  assert.equal(weekStats(data, next).jobComplete, true);
+  assert.equal(
+    data.rewards.some((r) => r.id === `goal:${next}:job`),
+    true,
+  );
+  assert.equal(validateData(data), true);
+});
+test("moving the last open interview away settles the now-met goal", () => {
+  let data = dataWith(task("cv", "resume", 15), task("interview", "interview"));
+  data = completeTask(data, "cv", "2026-10-13");
+  assert.equal(balance(data), 5);
+  data = moveTasks(data, ["interview"], "2026-10-14");
+  assert.equal(balance(data), 25);
+  const goal = data.rewards.find((r) => r.id === `goal:${day}:job`);
+  assert.equal(goal.date, "2026-10-14");
+  assert.equal(validateData(data), true);
+});
+test("moving to next week never pulls later-planned tasks back", () => {
+  const later = "2026-10-26";
+  let data = dataWith(task("later", "none", 1, { plannedWeek: later }));
+  data = { ...data, daily: { [day]: ["later"] } };
+  const moved = moveTasks(data, ["later"], day);
+  assert.equal(moved.tasks[0].plannedWeek, later);
+  assert.deepEqual(moved.daily[day], ["later"]);
+});
+test("imported backups keep only known fields", () => {
+  const done = completeTask(dataWith(task("a")), "a", day);
+  const extra = structuredClone(done);
+  extra.extra = "x";
+  extra.tasks[0].note = "x";
+  extra.completions[0].note = "x";
+  extra.rewards[0].note = "x";
+  extra.events = [
+    { id: "e", title: "t", date: day, time: "", kind: "reminder", note: "", x: 1 },
+  ];
+  assert.equal(validateData(extra), true);
+  assert.deepEqual(normalizeData(extra), {
+    ...done,
+    events: [{ id: "e", title: "t", date: day, time: "", kind: "reminder", note: "" }],
+  });
+});
+test("today's view keeps completed tasks checked in the same list without using core slots", () => {
+  let data = dataWith(task("a"), task("b"), task("c"), task("d"), task("e"));
+  data = chooseDaily(data, day, ["a", "b", "c"]);
+  data = completeTask(data, "a", day);
+  data = completeTask(data, "d", day);
+  data = completeTask(data, "e", addDays(day, -1));
+  data = chooseDaily(data, day, ["b", "c", "x"]);
+  const view = dailyView(data, day);
+  assert.deepEqual(
+    view.map((t) => [t.id, t.status]),
+    [
+      ["b", "open"],
+      ["c", "open"],
+      ["a", "done"],
+      ["d", "done"],
+    ],
+  );
+  assert.equal(new Set(view.map((t) => t.id)).size, view.length);
+  assert.ok(view.filter((t) => t.status === "open").length <= 3);
 });
