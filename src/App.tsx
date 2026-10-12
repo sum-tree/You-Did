@@ -50,7 +50,8 @@ import type {
   Contribution,
   Task,
 } from "./domain.ts";
-import { loadData, persistData, STORAGE_KEY } from "./storage.ts";
+import { loadData, saveChange, STORAGE_KEY } from "./storage.ts";
+import type { Snapshot } from "./storage.ts";
 
 type Page = "daily" | "achievement" | "pool" | "calendar";
 const store = {
@@ -58,6 +59,15 @@ const store = {
   setItem: (key: string, value: string) =>
     window.localStorage.setItem(key, value),
 };
+function useDraft<T>(snapshot: { current: Snapshot }, initial: T) {
+  const [value, setValue] = useState(initial);
+  const base = useRef(snapshot.current);
+  const set = (next: T, origin = snapshot.current) => {
+    base.current = origin;
+    setValue(next);
+  };
+  return [value, set, base] as const;
+}
 const shortDate = (date: string) =>
   dateObject(date).toLocaleDateString("zh-CN", {
     month: "numeric",
@@ -107,10 +117,14 @@ function Modal({
   title,
   children,
   close,
+  notice,
+  exportPending,
 }: {
   title: string;
   children: ReactNode;
   close: () => void;
+  notice?: string;
+  exportPending?: () => void;
 }) {
   const ref = useRef<HTMLDialogElement>(null);
   useEffect(() => {
@@ -144,6 +158,16 @@ function Modal({
             <X size={20} />
           </button>
         </div>
+        {notice && (
+          <p className="form-note" role="alert">
+            {notice}
+          </p>
+        )}
+        {exportPending && (
+          <button className="outline-button full" onClick={exportPending}>
+            导出待保存备份
+          </button>
+        )}
         {children}
       </div>
     </dialog>
@@ -430,28 +454,42 @@ function EventForm({
 
 export default function App() {
   const [loaded] = useState(() => loadData(store));
+  const snapshot = useRef(loaded);
+  const saving = useRef(false);
   const [data, setData] = useState<AppData>(loaded.data);
   const [blocked, setBlocked] = useState(Boolean(loaded.error));
   const [rawRecovery, setRawRecovery] = useState(loaded.raw);
   const [error, setError] = useState(loaded.error);
+  const [saveIssue, setSaveIssue] = useState("");
+  const [pendingBackup, setPendingBackup] = useState<AppData | null>(null);
   const [page, setPage] = useState<Page>("daily");
   const [today, setToday] = useState(localDate);
   const [toast, setToast] = useState("");
-  const [taskForm, setTaskForm] = useState<Task | "new" | null>(null);
-  const [taskMenu, setTaskMenu] = useState<Task | null>(null);
-  const [eventForm, setEventForm] = useState<CalendarEvent | "new" | null>(
+  const [taskForm, setTaskForm, taskFormBase] = useDraft<Task | "new" | null>(
+    snapshot,
     null,
   );
-  const [eventMenu, setEventMenu] = useState<CalendarEvent | null>(null);
+  const [taskMenu, setTaskMenu, taskMenuBase] = useDraft<Task | null>(
+    snapshot,
+    null,
+  );
+  const [eventForm, setEventForm, eventFormBase] = useDraft<
+    CalendarEvent | "new" | null
+  >(snapshot, null);
+  const [eventMenu, setEventMenu, eventMenuBase] =
+    useDraft<CalendarEvent | null>(snapshot, null);
   const [settings, setSettings] = useState(false);
-  const [chooser, setChooser] = useState(false);
+  const [chooser, setChooser, chooserBase] = useDraft(snapshot, false);
   const [selection, setSelection] = useState<string[]>([]);
   const [poolWeek, setPoolWeek] = useState<
     "current" | "next" | "past" | "archived"
   >("current");
   const [filter, setFilter] = useState<Category | "all">("all");
   const [showDone, setShowDone] = useState(false);
-  const [batch, setBatch] = useState<"move" | "archive" | null>(null);
+  const [batch, setBatch, batchBase] = useDraft<"move" | "archive" | null>(
+    snapshot,
+    null,
+  );
   const [month, setMonth] = useState(() => `${localDate().slice(0, 7)}-01`);
   const [selectedDate, setSelectedDate] = useState(localDate);
   const week = weekStart(today);
@@ -494,15 +532,45 @@ export default function App() {
     }
     return true;
   };
-  const update = (change: (previous: AppData) => AppData) => {
-    if (canChange()) {
+  const accept = (next: Snapshot) => {
+    snapshot.current = next;
+    setData(next.data);
+    setBlocked(Boolean(next.error));
+    setRawRecovery(next.raw);
+    setError(next.error);
+  };
+  const update = async (
+    change: (previous: AppData) => AppData,
+    base = snapshot.current,
+    restore = false,
+  ) => {
+    if (!restore && !canChange()) return null;
+    if (saving.current) {
+      setToast("上一项正在保存，请稍后再试。");
+      return null;
+    }
+    saving.current = true;
+    try {
+      const result = await saveChange(
+        store,
+        navigator.locks,
+        base,
+        change,
+        restore,
+      );
+      accept(result.snapshot);
+      setSaveIssue(result.message);
+      if (result.status !== "saved") {
+        if (result.attempted) setPendingBackup(result.attempted);
+        setToast("本次改动未保存，请查看保存提示。");
+        return null;
+      }
       setToday(localDate());
-      setData(change);
+      return result;
+    } finally {
+      saving.current = false;
     }
   };
-  useEffect(() => {
-    if (!blocked) setError(persistData(store, data));
-  }, [data, blocked]);
   useEffect(() => {
     const updateDate = () => setToday(localDate());
     const timer = setInterval(updateDate, 30000);
@@ -520,28 +588,42 @@ export default function App() {
     return () => clearTimeout(timer);
   }, [toast]);
   useEffect(() => {
+    const synchronize = () => {
+      const next = loadData(store);
+      if (
+        next.raw !== snapshot.current.raw ||
+        next.error !== snapshot.current.error
+      )
+        accept(next);
+    };
     const handler = (event: StorageEvent) => {
       if (event.key === STORAGE_KEY || event.key === null) {
-        const next = loadData(store);
-        setData(next.data);
-        setBlocked(Boolean(next.error));
-        setRawRecovery(next.raw);
-        setError(next.error);
+        synchronize();
       }
     };
     window.addEventListener("storage", handler);
-    return () => window.removeEventListener("storage", handler);
+    window.addEventListener("focus", synchronize);
+    document.addEventListener("visibilitychange", synchronize);
+    return () => {
+      window.removeEventListener("storage", handler);
+      window.removeEventListener("focus", synchronize);
+      document.removeEventListener("visibilitychange", synchronize);
+    };
   }, []);
-  function finish(task: Task) {
+  async function finish(task: Task) {
     if (!canChange()) return;
     const date = localDate();
     setToday(date);
-    const next = completeTask(data, task.id, date);
-    const earned = balance(next) - balance(data);
-    setData((previous) => completeTask(previous, task.id, date));
+    const base = snapshot.current;
+    const result = await update(
+      (previous) => completeTask(previous, task.id, date),
+      base,
+    );
+    if (!result) return;
+    const earned = balance(result.snapshot.data) - balance(base.data);
     setToast(`You did it! +${earned} 卡拉米 · 每一步都算数`);
   }
-  function commitTask(task: Task, todaySelected: boolean) {
+  async function commitTask(task: Task, todaySelected: boolean) {
     if (!canChange()) return;
     const date = localDate();
     const dailyNow = dailyTasks(data, date);
@@ -549,7 +631,7 @@ export default function App() {
       setToast("今日已有3项核心任务，请先更换或移出一项。");
       return;
     }
-    update((previous) => {
+    const result = await update((previous) => {
       const next = saveTask(previous, task, date);
       return todaySelected
         ? chooseDaily(next, date, [
@@ -557,10 +639,21 @@ export default function App() {
             task.id,
           ])
         : next;
-    });
+    }, taskFormBase.current);
+    if (!result) return;
     setTaskForm(null);
     setToast("任务已保存，小小的一步也很棒。");
   }
+  const syncNotice = {
+    notice: saveIssue,
+    exportPending: pendingBackup
+      ? () =>
+          download(
+            JSON.stringify(pendingBackup, null, 2),
+            `you-did-pending-${localDate()}.json`,
+          )
+      : undefined,
+  };
   function taskCard(task: Task, compact = false) {
     const done = task.status === "done";
     return (
@@ -678,9 +771,9 @@ export default function App() {
           </button>
         </div>
       </header>
-      {error && (
+      {(error || saveIssue || pendingBackup) && (
         <div className="storage-warning" role="alert">
-          {error}
+          {error || saveIssue || "有一份待保存备份，可在设置中导出。"}
           <button onClick={() => setSettings(true)}>数据备份</button>
         </div>
       )}
@@ -1283,6 +1376,7 @@ export default function App() {
       )}
       {taskForm && (
         <Modal
+          {...syncNotice}
           title={taskForm === "new" ? "添加一小步" : "调整任务"}
           close={() => setTaskForm(null)}
         >
@@ -1295,7 +1389,11 @@ export default function App() {
         </Modal>
       )}
       {taskMenu && (
-        <Modal title={taskMenu.title} close={() => setTaskMenu(null)}>
+        <Modal
+          {...syncNotice}
+          title={taskMenu.title}
+          close={() => setTaskMenu(null)}
+        >
           <p className="form-note">
             {CATEGORY[taskMenu.category].name} ·{" "}
             {dateLabel(taskMenu.dueDate, today)}
@@ -1305,7 +1403,7 @@ export default function App() {
               <>
                 <button
                   onClick={() => {
-                    setTaskForm(taskMenu);
+                    setTaskForm(taskMenu, taskMenuBase.current);
                     setTaskMenu(null);
                   }}
                 >
@@ -1313,7 +1411,7 @@ export default function App() {
                   <ArrowRight size={17} />
                 </button>
                 <button
-                  onClick={() => {
+                  onClick={async () => {
                     const date = localDate();
                     const ids = dailyTasks(data, date).map((item) => item.id);
                     if (!ids.includes(taskMenu.id) && ids.length >= 3) {
@@ -1327,15 +1425,18 @@ export default function App() {
                       setToast("这是下周的任务，调整计划周后再加入今日。");
                       return;
                     }
-                    update((previous) =>
-                      chooseDaily(
-                        previous,
-                        date,
-                        ids.includes(taskMenu.id)
-                          ? ids.filter((id) => id !== taskMenu.id)
-                          : [...ids, taskMenu.id],
-                      ),
+                    const result = await update(
+                      (previous) =>
+                        chooseDaily(
+                          previous,
+                          date,
+                          ids.includes(taskMenu.id)
+                            ? ids.filter((id) => id !== taskMenu.id)
+                            : [...ids, taskMenu.id],
+                        ),
+                      taskMenuBase.current,
                     );
+                    if (!result) return;
                     setTaskMenu(null);
                   }}
                 >
@@ -1345,10 +1446,13 @@ export default function App() {
                   <ArrowRight size={17} />
                 </button>
                 <button
-                  onClick={() => {
-                    update((previous) =>
-                      moveTasks(previous, [taskMenu.id], localDate()),
+                  onClick={async () => {
+                    const result = await update(
+                      (previous) =>
+                        moveTasks(previous, [taskMenu.id], localDate()),
+                      taskMenuBase.current,
                     );
+                    if (!result) return;
                     setTaskMenu(null);
                     setToast("已移至下周，已获积分保留。");
                   }}
@@ -1357,8 +1461,12 @@ export default function App() {
                   <ArrowRight size={17} />
                 </button>
                 <button
-                  onClick={() => {
-                    update((previous) => archiveTasks(previous, [taskMenu.id]));
+                  onClick={async () => {
+                    const result = await update(
+                      (previous) => archiveTasks(previous, [taskMenu.id]),
+                      taskMenuBase.current,
+                    );
+                    if (!result) return;
                     setTaskMenu(null);
                     setToast("任务已清空，可在待办「已清空」中恢复。");
                   }}
@@ -1368,15 +1476,19 @@ export default function App() {
               </>
             ) : taskMenu.status === "archived" ? (
               <button
-                onClick={() => {
-                  update((previous) => ({
-                    ...previous,
-                    tasks: previous.tasks.map((task) =>
-                      task.id === taskMenu.id
-                        ? { ...task, status: "open" }
-                        : task,
-                    ),
-                  }));
+                onClick={async () => {
+                  const result = await update(
+                    (previous) => ({
+                      ...previous,
+                      tasks: previous.tasks.map((task) =>
+                        task.id === taskMenu.id
+                          ? { ...task, status: "open" }
+                          : task,
+                      ),
+                    }),
+                    taskMenuBase.current,
+                  );
+                  if (!result) return;
                   setTaskMenu(null);
                   setToast("任务已恢复。");
                 }}
@@ -1391,7 +1503,11 @@ export default function App() {
         </Modal>
       )}
       {chooser && (
-        <Modal title="安排今天的3件小事" close={() => setChooser(false)}>
+        <Modal
+          {...syncNotice}
+          title="安排今天的3件小事"
+          close={() => setChooser(false)}
+        >
           <p className="form-note">
             选择最多3项。未选入的到期任务仍会在提醒区显示。
           </p>
@@ -1428,8 +1544,12 @@ export default function App() {
           </div>
           <button
             className="primary"
-            onClick={() => {
-              update((previous) => chooseDaily(previous, localDate(), selection));
+            onClick={async () => {
+              const result = await update(
+                (previous) => chooseDaily(previous, localDate(), selection),
+                chooserBase.current,
+              );
+              if (!result) return;
               setChooser(false);
             }}
           >
@@ -1438,12 +1558,13 @@ export default function App() {
           </button>
           <button
             className="text-button full"
-            onClick={() => {
-              update((previous) => {
+            onClick={async () => {
+              const result = await update((previous) => {
                 const days = { ...previous.daily };
                 delete days[localDate()];
                 return { ...previous, daily: days };
-              });
+              }, chooserBase.current);
+              if (!result) return;
               setChooser(false);
             }}
           >
@@ -1453,6 +1574,7 @@ export default function App() {
       )}
       {batch && (
         <Modal
+          {...syncNotice}
           title={batch === "move" ? "把未完成留给下周" : "清空这些未完成任务？"}
           close={() => setBatch(null)}
         >
@@ -1466,15 +1588,18 @@ export default function App() {
           </p>
           <button
             className="primary"
-            onClick={() => {
+            onClick={async () => {
               const ids = pool
                 .filter((task) => task.status === "open")
                 .map((task) => task.id);
-              update((previous) =>
-                batch === "move"
-                  ? moveTasks(previous, ids, localDate())
-                  : archiveTasks(previous, ids),
+              const result = await update(
+                (previous) =>
+                  batch === "move"
+                    ? moveTasks(previous, ids, localDate())
+                    : archiveTasks(previous, ids),
+                batchBase.current,
               );
+              if (!result) return;
               setBatch(null);
               setToast("已重新安排，慢慢来就好。");
             }}
@@ -1486,21 +1611,26 @@ export default function App() {
       )}
       {eventForm && (
         <Modal
+          {...syncNotice}
           title={eventForm === "new" ? "记下一个重要日子" : "编辑重要事项"}
           close={() => setEventForm(null)}
         >
           <EventForm
             existing={eventForm === "new" ? undefined : eventForm}
             date={selectedDate}
-            commit={(event) => {
-              update((previous) => ({
-                ...previous,
-                events: previous.events.some((item) => item.id === event.id)
-                  ? previous.events.map((item) =>
-                      item.id === event.id ? event : item,
-                    )
-                  : [...previous.events, event],
-              }));
+            commit={async (event) => {
+              const result = await update(
+                (previous) => ({
+                  ...previous,
+                  events: previous.events.some((item) => item.id === event.id)
+                    ? previous.events.map((item) =>
+                        item.id === event.id ? event : item,
+                      )
+                    : [...previous.events, event],
+                }),
+                eventFormBase.current,
+              );
+              if (!result) return;
               setEventForm(null);
               setSelectedDate(event.date);
               setMonth(`${event.date.slice(0, 7)}-01`);
@@ -1510,7 +1640,11 @@ export default function App() {
         </Modal>
       )}
       {eventMenu && (
-        <Modal title={eventMenu.title} close={() => setEventMenu(null)}>
+        <Modal
+          {...syncNotice}
+          title={eventMenu.title}
+          close={() => setEventMenu(null)}
+        >
           <p className="form-note">
             {eventMenu.date} · {eventMenu.time || "全天"}
           </p>
@@ -1518,7 +1652,7 @@ export default function App() {
           <div className="action-list">
             <button
               onClick={() => {
-                setEventForm(eventMenu);
+                setEventForm(eventMenu, eventMenuBase.current);
                 setEventMenu(null);
               }}
             >
@@ -1526,13 +1660,17 @@ export default function App() {
               <ArrowRight size={17} />
             </button>
             <button
-              onClick={() => {
-                update((previous) => ({
-                  ...previous,
-                  events: previous.events.filter(
-                    (event) => event.id !== eventMenu.id,
-                  ),
-                }));
+              onClick={async () => {
+                const result = await update(
+                  (previous) => ({
+                    ...previous,
+                    events: previous.events.filter(
+                      (event) => event.id !== eventMenu.id,
+                    ),
+                  }),
+                  eventMenuBase.current,
+                );
+                if (!result) return;
                 setEventMenu(null);
                 setToast("事项已移除。");
               }}
@@ -1544,7 +1682,11 @@ export default function App() {
         </Modal>
       )}
       {settings && (
-        <Modal title="按自己的节奏来" close={() => setSettings(false)}>
+        <Modal
+          {...syncNotice}
+          title="按自己的节奏来"
+          close={() => setSettings(false)}
+        >
           <div className="settings-section">
             <h3>学期进度</h3>
             <p>共13周课程 + 2周考试；按实际教学周调整。</p>
@@ -1553,12 +1695,13 @@ export default function App() {
               <select
                 aria-label="当前学期周数"
                 value={data.courseWeek}
-                onChange={(e) =>
-                  update((previous) => ({
+                onChange={(e) => {
+                  const courseWeek = Number(e.target.value);
+                  void update((previous) => ({
                     ...previous,
-                    courseWeek: Number(e.target.value),
-                  }))
-                }
+                    courseWeek,
+                  }));
+                }}
               >
                 {Array.from({ length: 15 }, (_, i) => (
                   <option value={i + 1} key={i}>
@@ -1574,6 +1717,20 @@ export default function App() {
             <p>
               记录只存在当前浏览器中。换设备、换网址或清理浏览器前，先导出备份。
             </p>
+            <p>
+              多个页面同时编辑时，过期的改动会停止保存。待保存备份仅保留在当前页面，关闭或刷新前请先导出；它包含本次尝试的记录，不会自动合并到最新记录。
+            </p>
+            {pendingBackup && (
+              <button
+                className="text-button full"
+                onClick={() => {
+                  if (window.confirm("丢弃待保存备份？已保存的记录不受影响。"))
+                    setPendingBackup(null);
+                }}
+              >
+                丢弃待保存备份
+              </button>
+            )}
             <button
               className="outline-button full"
               onClick={() =>
@@ -1603,6 +1760,7 @@ export default function App() {
                 onChange={async (e) => {
                   const file = e.target.files?.[0];
                   if (!file) return;
+                  const base = snapshot.current;
                   e.target.value = "";
                   try {
                     if (file.size > 10 * 1024 * 1024)
@@ -1614,8 +1772,8 @@ export default function App() {
                         "导入会替换当前记录。请先导出当前备份，确定导入吗？",
                       )
                     ) {
-                      setData(value);
-                      setBlocked(false);
+                      const result = await update(() => value, base, true);
+                      if (!result) return;
                       setToast("备份已恢复，继续积累你的小小进步。");
                     }
                   } catch {
