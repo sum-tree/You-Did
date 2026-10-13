@@ -182,7 +182,6 @@ export default function App() {
             today={today}
             onFinish={finish}
             onMenu={(task) => setTaskMenu(task)}
-            onEdit={(task) => setTaskForm(task)}
             onArrange={() => {
               setSelection(dailyTasks(data, today).map((task) => task.id));
               setChooser(true);

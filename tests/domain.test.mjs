@@ -616,3 +616,12 @@ test("an undone weekly task returns to today's plan", () => {
   data = uncompleteTask(data, auto("resume", 1), day);
   assert.equal(dailyTasks(data, day)[0].id, auto("resume", 1));
 });
+test("without scheduled interviews job progress follows resumes only", () => {
+  assert.equal(weekStats(emptyData(), day).jobPercent, 0);
+  const six = completeTask(dataWith(task("cv", "resume", 6)), "cv", day);
+  assert.equal(weekStats(six, day).jobPercent, 40);
+  const full = completeTask(dataWith(task("cv", "resume", 15)), "cv", day);
+  assert.equal(weekStats(full, day).jobPercent, 100);
+  const withInterview = dataWith(task("iv", "interview"));
+  assert.equal(weekStats(withInterview, day).jobPercent, 0);
+});

@@ -323,57 +323,6 @@ main {
 .bottom-nav button.active > span {
   background: #f4e5d2;
 }
-.urgent-panel {
-  border: 1px solid #efdbc2;
-  background: #fbf0df;
-  border-radius: 13px;
-  margin: 0 0 20px;
-  padding: 12px;
-  color: #a17040;
-}
-.urgent-panel summary {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  font-size: 11px;
-  cursor: pointer;
-  min-height: 26px;
-}
-.urgent-panel summary > span {
-  flex: 1;
-}
-.urgent-panel p {
-  font-size: 10px;
-  line-height: 1.8;
-  margin: 8px 0;
-}
-.urgent-panel > button {
-  width: 100%;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 9px 0;
-  border-top: 1px solid #ecdcc8;
-  text-align: left;
-  font-size: 11px;
-}
-.urgent-panel > button > span:first-child {
-  flex: 1;
-  overflow-wrap: anywhere;
-}
-.urgent-panel small {
-  display: block;
-  margin-top: 3px;
-  font-size: 9px;
-}
-.urgent-panel > button > span:last-child {
-  display: flex;
-  align-items: center;
-  gap: 2px;
-  white-space: nowrap;
-  font-size: 10px;
-}
 .reward-history {
   margin: 18px 0;
   border: 1px solid var(--line);

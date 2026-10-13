@@ -1,41 +1,23 @@
-import {
-  ArrowRight,
-  ChevronRight,
-  Clock3,
-  Ellipsis,
-  Settings2,
-} from "lucide-react";
+import { Ellipsis, Settings2 } from "lucide-react";
 import { CATEGORY, dailyView } from "../domain.ts";
 import type { AppData, Task } from "../domain.ts";
-import {
-  contributionLabel,
-  dateLabel,
-  longDate,
-  TaskCheck,
-} from "../components.tsx";
+import { dateLabel, longDate, TaskCheck } from "../components.tsx";
 
 export function DailyPage({
   data,
   today,
   onFinish,
   onMenu,
-  onEdit,
   onArrange,
 }: {
   data: AppData;
   today: string;
   onFinish: (task: Task) => void;
   onMenu: (task: Task) => void;
-  onEdit: (task: Task) => void;
   onArrange: () => void;
 }) {
   const todayList = dailyView(data, today);
   const manualToday = Object.hasOwn(data.daily, today);
-  const urgent = data.tasks
-    .filter(
-      (task) => task.status === "open" && task.dueDate && task.dueDate <= today,
-    )
-    .sort((a, b) => a.dueDate.localeCompare(b.dueDate));
   const completedToday = data.completions.filter((item) => item.date === today);
   const earnedToday = data.rewards
     .filter((r) => r.date === today)
@@ -57,28 +39,6 @@ export function DailyPage({
         今日完成 <strong>{completedToday.length}</strong> 项 · 获得{" "}
         <strong>{earnedToday}</strong> 卡拉米
       </p>
-      {urgent.length > 0 && (
-        <details className="urgent-panel" open={urgent.length > 3}>
-          <summary>
-            <Clock3 size={17} />
-            <span>{urgent.length}项到期或逾期</span>
-            <ChevronRight size={17} />
-          </summary>
-          <p>核心任务最多3项。如今天安排过满，可手动调整截止日期。</p>
-          {urgent.map((task) => (
-            <button key={task.id} onClick={() => onEdit(task)}>
-              <span>
-                {task.title}
-                <small>{dateLabel(task.dueDate, today)}</small>
-              </span>
-              <span>
-                改DDL
-                <ArrowRight size={13} />
-              </span>
-            </button>
-          ))}
-        </details>
-      )}
       <div className="task-stack">
         {todayList.length ? (
           todayList.map((task) => {
@@ -95,13 +55,12 @@ export function DailyPage({
                     <span className={`tag ${task.category}`}>
                       {CATEGORY[task.category].short}
                     </span>
-                    <span
-                      className={`due ${task.dueDate && task.dueDate < today && !done ? "late" : ""}`}
-                    >
-                      {done ? "已完成" : dateLabel(task.dueDate, today)}
-                    </span>
-                    {task.kind !== "none" && (
-                      <span className="due">{contributionLabel(task)}</span>
+                    {task.dueDate && !done && (
+                      <span
+                        className={`due ${task.dueDate < today ? "late" : ""}`}
+                      >
+                        {dateLabel(task.dueDate, today)}
+                      </span>
                     )}
                     <span className="priority">P{task.priority}</span>
                   </div>

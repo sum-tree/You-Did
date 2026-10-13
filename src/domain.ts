@@ -201,11 +201,15 @@ export function weekStats(data: AppData, week: string) {
     interviewTotal: interviewIds.size,
     jobComplete,
     speechComplete,
-    jobPercent: percent(
-      ratio(resumes, 15),
-      ratio(interviewDone, interviewIds.size),
-      jobComplete,
-    ),
+    // With no interview scheduled, progress is resumes alone (not a free 50%).
+    jobPercent:
+      interviewIds.size === 0
+        ? percent(ratio(resumes, 15), ratio(resumes, 15), jobComplete)
+        : percent(
+            ratio(resumes, 15),
+            ratio(interviewDone, interviewIds.size),
+            jobComplete,
+          ),
     speechPercent: percent(
       ratio(cantonese, 2),
       ratio(english, 9),
