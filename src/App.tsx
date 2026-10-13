@@ -140,13 +140,15 @@ export default function App() {
             <Coins size={17} />
             <strong>{balance(data)}</strong>
           </button>
-          <button
-            className="icon-button"
-            aria-label="设置与数据备份"
-            onClick={() => setSettings(true)}
-          >
-            <Settings2 size={19} />
-          </button>
+          {page === "achievement" && (
+            <button
+              className="icon-button"
+              aria-label="设置与数据备份"
+              onClick={() => setSettings(true)}
+            >
+              <Settings2 size={19} />
+            </button>
+          )}
           {page === "pool" && (
             <button
               className="add-button"
