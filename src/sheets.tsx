@@ -270,50 +270,6 @@ export function ChooserSheet({
   );
 }
 
-export function BatchSheet({
-  sync,
-  update,
-  notify,
-  close,
-  kind,
-  ids,
-  base,
-}: SheetProps & { kind: "move" | "archive"; ids: string[]; base: Snapshot }) {
-  return (
-    <Modal
-      {...sync}
-      title={kind === "move" ? "把未完成移至下周" : "清空这些未完成任务？"}
-      close={close}
-    >
-      <p className="form-note">
-        当前筛选中有{ids.length}项未完成任务。
-        {kind === "move"
-          ? "计划周改为下周，早于下周一的DDL调整到下周一；你可以继续手动修改。"
-          : "任务移入可恢复的「已清空」记录。"}
-        已获积分保留。
-      </p>
-      <button
-        className="primary"
-        onClick={async () => {
-          const result = await update(
-            (previous) =>
-              kind === "move"
-                ? moveTasks(previous, ids, localDate())
-                : archiveTasks(previous, ids),
-            base,
-          );
-          if (!result) return;
-          close();
-          notify("已重新安排，慢慢来就好。");
-        }}
-      >
-        确认{kind === "move" ? "移至下周" : "清空"} {ids.length} 项
-        <Check size={18} />
-      </button>
-    </Modal>
-  );
-}
-
 export function DaySheet({
   sync,
   update,

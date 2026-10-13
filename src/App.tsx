@@ -23,7 +23,6 @@ import type { CalendarEvent, Task } from "./domain.ts";
 import { download, EventForm, Modal, TaskForm } from "./components.tsx";
 import { useAppStore, useDraft } from "./useAppStore.ts";
 import {
-  BatchSheet,
   ChooserSheet,
   DaySheet,
   SettingsSheet,
@@ -59,10 +58,6 @@ export default function App() {
   );
   const [chooser, setChooser, chooserBase] = useDraft(snapshot, false);
   const [selection, setSelection] = useState<string[]>([]);
-  const [batch, setBatch, batchBase] = useDraft<{
-    kind: "move" | "archive";
-    ids: string[];
-  } | null>(snapshot, null);
   const [poolView, setPoolView] = useState(initialPoolView);
   const [month, setMonth] = useState(() => `${localDate().slice(0, 7)}-01`);
   const [selectedDate, setSelectedDate] = useState(localDate);
@@ -189,11 +184,7 @@ export default function App() {
           />
         )}
         {page === "achievement" && (
-          <AchievementPage
-            data={data}
-            today={today}
-            onAdjustCourse={() => setSettings(true)}
-          />
+          <AchievementPage data={data} today={today} />
         )}
         {page === "pool" && (
           <PoolPage
@@ -203,7 +194,6 @@ export default function App() {
             setView={setPoolView}
             onFinish={finish}
             onMenu={(task) => setTaskMenu(task)}
-            onBatch={(kind, ids) => setBatch({ kind, ids })}
           />
         )}
         {page === "calendar" && (
@@ -286,17 +276,6 @@ export default function App() {
           setSelection={setSelection}
           today={today}
           base={chooserBase.current}
-        />
-      )}
-      {batch && (
-        <BatchSheet
-          sync={sync}
-          update={update}
-          notify={setToast}
-          close={() => setBatch(null)}
-          kind={batch.kind}
-          ids={batch.ids}
-          base={batchBase.current}
         />
       )}
       {daySheet && (

@@ -28,7 +28,6 @@ export function PoolPage({
   setView,
   onFinish,
   onMenu,
-  onBatch,
 }: {
   data: AppData;
   today: string;
@@ -36,7 +35,6 @@ export function PoolPage({
   setView: (view: PoolView) => void;
   onFinish: (task: Task) => void;
   onMenu: (task: Task) => void;
-  onBatch: (kind: "move" | "archive", ids: string[]) => void;
 }) {
   const week = weekStart(today);
   const pool = data.tasks
@@ -61,9 +59,7 @@ export function PoolPage({
         (a.dueDate || "9999").localeCompare(b.dueDate || "9999") ||
         a.createdAt.localeCompare(b.createdAt),
     );
-  const openIds = pool
-    .filter((task) => task.status === "open")
-    .map((task) => task.id);
+  const openCount = pool.filter((task) => task.status === "open").length;
   return (
     <section className="todo-table" aria-label="待办清单">
       <div className="table-tools">
@@ -108,12 +104,15 @@ export function PoolPage({
           </label>
         )}
       </div>
+      {view.week !== "archived" && (
+        <p className="table-count">未完成 {openCount} 项</p>
+      )}
       <div className="todo-head" aria-hidden="true">
         <span />
         <span>标题</span>
+        <span>优先</span>
         <span>类型</span>
         <span>DDL</span>
-        <span>优先</span>
       </div>
       {pool.length ? (
         pool.map((task) => {
@@ -132,6 +131,7 @@ export function PoolPage({
                 >
                   {task.title}
                 </button>
+                <span className="todo-priority">P{task.priority}</span>
                 <span className={`tag ${task.category}`}>
                   {CATEGORY[task.category].short}
                 </span>
@@ -144,7 +144,6 @@ export function PoolPage({
                       ? "今天"
                       : shortDate(task.dueDate)}
                 </span>
-                <span className="todo-priority">P{task.priority}</span>
               </div>
               {open && (
                 <div className="todo-detail">
@@ -162,18 +161,6 @@ export function PoolPage({
         })
       ) : (
         <p className="table-empty">暂无记录</p>
-      )}
-      {openIds.length > 0 && (
-        <div className="table-foot">
-          <span>未完成 {openIds.length} 项</span>
-          {view.week !== "next" && (
-            <button onClick={() => onBatch("move", openIds)}>
-              移至下周
-              <ArrowRight size={14} />
-            </button>
-          )}
-          <button onClick={() => onBatch("archive", openIds)}>清空</button>
-        </div>
       )}
     </section>
   );
