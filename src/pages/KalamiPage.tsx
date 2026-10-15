@@ -127,7 +127,7 @@ function constrainJarPhysics(p: BallPhysics) {
   const e = 0.28; // Soft jelly restitution
 
   // 1. Top Ceiling / Cork Stopper constraint
-  // Jar mouth begins at y=42, cork plug at y=32..54. Jellies in jar cannot pop out above CEILING
+  // Jar mouth begins at y=42, cork plug at y=32..54. Jellies bouncing in jar cannot pop out above CEILING
   const CEILING = 56.0;
   if (p.y <= CEILING && p.vy < 0) {
     p.y = CEILING;
@@ -137,10 +137,6 @@ function constrainJarPhysics(p: BallPhysics) {
       p.vDeform -= 0.15;
       p.deformAngle = 90;
     }
-  }
-  if (p.y < CEILING && p.vy <= 0) {
-    p.y = CEILING;
-    p.vy = 0.2;
   }
 
   // 2. Floor
@@ -242,13 +238,19 @@ function constrainJarPhysics(p: BallPhysics) {
     }
   } else if (p.y >= 64) {
     // 4. Shoulders slope (seamless between x=99 at y=64 and x=43 at y=98)
-    const leftLimit = 99.0 - (p.y - 64.0) * 1.647;
-    const rightLimit = 161.0 + (p.y - 64.0) * 1.647;
-    if (p.x < leftLimit) {
-      p.x = leftLimit;
-      if (p.vx < 0) {
-        const impactSpeed = -p.vx;
-        p.vx = -p.vx * e;
+    // Left shoulder connects (43, 98) to (99, 64); inward normal points (0.519, 0.855)
+    // Right shoulder connects (161, 64) to (217, 98); inward normal points (-0.519, 0.855)
+    const snx = 0.519;
+    const sny = 0.855;
+    const leftDist = snx * (p.x - 99.0) + sny * (p.y - 64.0);
+    if (leftDist < 0) {
+      p.x -= leftDist * snx;
+      p.y -= leftDist * sny;
+      const vn = p.vx * snx + p.vy * sny;
+      if (vn < 0) {
+        const impactSpeed = -vn;
+        p.vx -= (1 + e) * vn * snx;
+        p.vy -= (1 + e) * vn * sny;
         p.omega *= 0.85;
         if (impactSpeed > 0.45 && Math.abs(p.deform) < 0.18) {
           p.vDeform -= Math.min(1.0, (impactSpeed - 0.35) / 3.8) * 0.26;
@@ -256,11 +258,15 @@ function constrainJarPhysics(p: BallPhysics) {
         }
       }
     }
-    if (p.x > rightLimit) {
-      p.x = rightLimit;
-      if (p.vx > 0) {
-        const impactSpeed = p.vx;
-        p.vx = -p.vx * e;
+    const rightDist = -snx * (p.x - 161.0) + sny * (p.y - 64.0);
+    if (rightDist < 0) {
+      p.x -= rightDist * (-snx);
+      p.y -= rightDist * sny;
+      const vn = p.vx * (-snx) + p.vy * sny;
+      if (vn < 0) {
+        const impactSpeed = -vn;
+        p.vx -= (1 + e) * vn * (-snx);
+        p.vy -= (1 + e) * vn * sny;
         p.omega *= 0.85;
         if (impactSpeed > 0.45 && Math.abs(p.deform) < 0.18) {
           p.vDeform -= Math.min(1.0, (impactSpeed - 0.35) / 3.8) * 0.26;
@@ -540,8 +546,17 @@ export function KalamiPage({ data }: { data: AppData }) {
 
       // 5. Ceremony & Cork Closure check
       const allActive = balls.every((b) => b.active);
-      const avgMotion = balls.length > 0 ? totalMotion / balls.length : 0;
-      const isCalm = allActive && avgMotion < 0.15;
+      // A ball is settled only if it is active, slow, and has descended into the lower jar/pile
+      const allLanded = balls.every((b, i) => {
+        if (!b.active) return false;
+        const speed = Math.hypot(b.vx, b.vy);
+        if (hasNew && i >= newStartIndex) {
+          // Newly dropped ball must have reached the resting area (y > 140)
+          return speed < 0.25 && b.y > 140;
+        }
+        return speed < 0.25;
+      });
+      const isCalm = allActive && allLanded;
 
       if (isCalm) {
         calmFrames++;
@@ -551,7 +566,7 @@ export function KalamiPage({ data }: { data: AppData }) {
 
       // Reliable cork closure when all new balls are in and settled, or on deadline
       if (hasNew && !corkHandledRef.current && allActive) {
-        const canClose = calmFrames >= 12 || now >= ceremonyDeadlineRef.current;
+        const canClose = (calmFrames >= 15 && allLanded) || (now >= ceremonyDeadlineRef.current && allLanded);
         if (canClose) {
           corkHandledRef.current = true;
           setCorkState("closing");
@@ -583,6 +598,13 @@ export function KalamiPage({ data }: { data: AppData }) {
     if (ballsRef.current.length === inJar && !hasNew) {
       corkHandledRef.current = true;
       writeSeen(total);
+      // Ensure any remaining motion finishes smoothly and doesn't freeze in mid-air
+      const isStillMoving = ballsRef.current.some(
+        (b) => Math.hypot(b.vx, b.vy) > 0.05 || Math.abs(b.vDeform) > 0.02
+      );
+      if (isStillMoving) {
+        wakeUp();
+      }
       return;
     }
 
@@ -746,12 +768,13 @@ export function KalamiPage({ data }: { data: AppData }) {
 
   // Tap / Click Interaction: Jumble & bounce the jellies
   const handleJarTap = () => {
-    if (jarWobble) return;
+    if (jarWobble || hasNew || corkState !== "closed") return;
     setJarWobble(true);
     setTimeout(() => setJarWobble(false), 650);
 
     // Natural shockwave bounce: bottom balls receive direct impulse, transmitting smoothly up
     ballsRef.current.forEach((b) => {
+      if (!b.active) return;
       const heightFactor = Math.max(0.45, Math.min(1.0, (b.y - 50) / 220));
       b.vy -= (Math.random() * 1.5 + 2.2) * heightFactor;
       b.vx += (Math.random() - 0.5) * 2.2;
@@ -802,6 +825,7 @@ export function KalamiPage({ data }: { data: AppData }) {
         role="img"
         aria-label={`卡拉米罐：共${total}颗卡拉米${fullJars ? `，已装满${fullJars}罐` : ""}`}
         onClick={handleJarTap}
+        style={{ cursor: hasNew || corkState !== "closed" ? "default" : "pointer" }}
       >
         <defs>
           {COLORS.map((color) => (

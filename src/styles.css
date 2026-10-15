@@ -212,14 +212,22 @@ main {
   position: relative;
 }
 .task-check {
-  width: 23px;
-  height: 23px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  margin: 0;
+  margin-top: 1px;
   flex-shrink: 0;
   border: 1.5px solid #cacdbf;
   border-radius: 50%;
-  margin-top: 1px;
   background: #fffefa;
   position: relative;
+  box-sizing: border-box;
+  line-height: 0;
+  cursor: pointer;
 }
 .task-check:before {
   content: "";
@@ -231,11 +239,17 @@ main {
   background: #f2f3e7;
 }
 .task-check.checked {
-  display: grid;
-  place-items: center;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   border-color: #8d9c72;
   background: #8d9c72;
   color: white;
+}
+.task-check.checked svg {
+  display: block;
+  margin: auto;
+  pointer-events: none;
 }
 .task-content {
   flex: 1;

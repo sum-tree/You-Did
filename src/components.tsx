@@ -51,11 +51,12 @@ export function TaskCheck({
   const done = task.status === "done";
   return (
     <button
+      type="button"
       className={`task-check ${done ? "checked" : ""}`}
       aria-label={`${done ? "点击撤销完成" : "完成任务"}：${task.title}`}
       onClick={() => onFinish(task)}
     >
-      {done && <Check size={17} />}
+      {done && <Check size={14} strokeWidth={2.8} />}
     </button>
   );
 }
