@@ -2,6 +2,7 @@ export type Category = "job" | "speech" | "course";
 export type Contribution =
   | "resume"
   | "interview"
+  | "test"
   | "cantonese"
   | "english"
   | "listening"
@@ -44,7 +45,8 @@ export interface CalendarEvent {
   note: string;
 }
 export interface AppData {
-  version: 1;
+  // 2: reward rules of PRD v0.6. Version 1 records are recomputed on load.
+  version: 2;
   tasks: Task[];
   completions: Completion[];
   rewards: Reward[];
@@ -64,7 +66,8 @@ export const KIND: Record<
   { label: string; unit: string; category: Category | null }
 > = {
   resume: { label: "简历投递", unit: "份", category: "job" },
-  interview: { label: "测试 / 面试", unit: "项", category: "job" },
+  interview: { label: "面试", unit: "项", category: "job" },
+  test: { label: "测试 / 笔试", unit: "项", category: "job" },
   cantonese: {
     label: "粤语练习（每次30分钟）",
     unit: "次",
@@ -92,7 +95,8 @@ export function inferContribution(
   const one = (kind: Contribution) => ({ kind, amount: 1 });
   if (category === "course") return one("course");
   if (category === "job") {
-    if (/面试|测试|笔试|interview/i.test(title)) return one("interview");
+    if (/面试|interview/i.test(title)) return one("interview");
+    if (/测试|笔试|test/i.test(title)) return one("test");
     if (/简历|投递|cv|resume/i.test(title))
       return {
         kind: "resume",
@@ -137,9 +141,40 @@ export function validDate(value: unknown): value is string {
     localDate(dateObject(value)) === value
   );
 }
+// Tests and interviews both must be finished for the weekly job goal.
+const gatesJob = (kind: Contribution) => kind === "interview" || kind === "test";
+const TASK_REWARD: Record<Exclude<Contribution, "interview">, number> = {
+  none: 2,
+  resume: 4,
+  test: 8,
+  cantonese: 2,
+  english: 4,
+  listening: 2,
+  course: 1,
+};
+export const GOAL_REWARD = { job: 10, speech: 7 } as const;
+export const TIER_REWARD = { job: 4, speech: 2 } as const;
+// Interview reward decays with days since the task was added (local dates),
+// independent of its DDL, so moving the DDL never resets the clock.
+function addedDate(task: Task): string {
+  const created = new Date(task.createdAt);
+  return Number.isNaN(created.getTime()) ? task.plannedWeek : localDate(created);
+}
+export function interviewReward(task: Task, date: string): number {
+  const days = Math.round(
+    (dateObject(date).getTime() - dateObject(addedDate(task)).getTime()) /
+      86400000,
+  );
+  return days <= 3 ? 12 : days <= 6 ? 4 : days <= 10 ? 2 : 1;
+}
+export function taskReward(task: Task, date: string): number {
+  return task.kind === "interview"
+    ? interviewReward(task, date)
+    : TASK_REWARD[task.kind];
+}
 export function emptyData(): AppData {
   return {
-    version: 1,
+    version: 2,
     tasks: [],
     completions: [],
     rewards: [],
@@ -161,13 +196,11 @@ export function weekStats(data: AppData, week: string) {
       .filter((item) => item.kind === kind)
       .reduce((total, item) => total + item.amount, 0);
   const completedIds = new Set(
-    records
-      .filter((item) => item.kind === "interview")
-      .map((item) => item.taskId),
+    records.filter((item) => gatesJob(item.kind)).map((item) => item.taskId),
   );
   // Cross-week work belongs to the completion week; archived interviews are not completions.
   const planned = data.tasks
-    .filter((task) => task.kind === "interview" && task.plannedWeek === week)
+    .filter((task) => gatesJob(task.kind) && task.plannedWeek === week)
     .map((task) => task.id);
   const interviewIds = new Set([...planned, ...completedIds]);
   // Finishing a planned interview early also satisfies its planned week; late completion does not.
@@ -175,7 +208,7 @@ export function weekStats(data: AppData, week: string) {
     data.completions
       .filter(
         (item) =>
-          item.kind === "interview" &&
+          gatesJob(item.kind) &&
           item.week < week &&
           planned.includes(item.taskId),
       )
@@ -238,20 +271,20 @@ export function settleRewards(
   };
   const stats = weekStats(data, week);
   if (stats.jobComplete) {
-    grant(`goal:${week}:job`, 20, "香港揾工 · 本周基础目标");
+    grant(`goal:${week}:job`, GOAL_REWARD.job, "香港揾工 · 本周基础目标");
     for (let tier = 1; tier <= stats.jobTiers; tier++)
       grant(
         `bonus:${week}:job:${tier}`,
-        10,
+        TIER_REWARD.job,
         `香港揾工 · 额外3份简历（第${tier}档）`,
       );
   }
   if (stats.speechComplete) {
-    grant(`goal:${week}:speech`, 20, "大胆说口语 · 本周基础目标");
+    grant(`goal:${week}:speech`, GOAL_REWARD.speech, "大胆说口语 · 本周基础目标");
     for (let tier = 1; tier <= stats.speechTiers; tier++)
       grant(
         `bonus:${week}:speech:${tier}`,
-        5,
+        TIER_REWARD.speech,
         `大胆说口语 · 听力10分钟（第${tier}档）`,
       );
   }
@@ -284,7 +317,13 @@ export function completeTask(data: AppData, id: string, date: string): AppData {
       completions: [...data.completions, completion],
       rewards: [
         ...data.rewards,
-        { id: `task:${id}`, amount: 5, label: task.title, date, week },
+        {
+          id: `task:${id}`,
+          amount: taskReward(task, date),
+          label: task.title,
+          date,
+          week,
+        },
       ],
     },
     week,
@@ -314,12 +353,12 @@ export function uncompleteTask(
     rewards: data.rewards.filter((item) => item.id !== `task:${id}`),
   };
   const stats = weekStats(next, week);
-  const job = record.kind === "resume" || record.kind === "interview";
+  const job = record.kind === "resume" || gatesJob(record.kind);
   const speech = ["cantonese", "english", "listening"].includes(record.kind);
   if (!job && !speech) return next;
   const category = job ? "job" : "speech";
   const goalLost = job
-    ? stats.resumes < 15 || (record.kind === "interview" && !stats.jobComplete)
+    ? stats.resumes < 15 || (gatesJob(record.kind) && !stats.jobComplete)
     : record.kind !== "listening" && (stats.cantonese < 2 || stats.english < 9);
   const maxTier = job ? stats.jobTiers : stats.speechTiers;
   const revoked = (reward: Reward) => {
@@ -560,7 +599,7 @@ export function chooseDaily(
 // Backups may carry unknown fields; persist only the validated schema.
 export function normalizeData(data: AppData): AppData {
   return {
-    version: 1,
+    version: 2,
     tasks: data.tasks.map((t) => ({
       id: t.id,
       title: t.title,
@@ -604,9 +643,11 @@ export function normalizeData(data: AppData): AppData {
     ...(data.autoWeek ? { autoWeek: data.autoWeek } : {}),
   };
 }
-export function validateData(value: unknown): value is AppData {
+// Version 1 paid flat amounts (5 per task, 20 per goal, 10/5 per tier); version 2
+// uses the current reward table. Structure and consistency rules are shared.
+function validateRecord(value: unknown, version: 1 | 2): boolean {
   if (!value || typeof value !== "object") return false;
-  const d = value as AppData;
+  const d = value as Omit<AppData, "version"> & { version: unknown };
   const text = (v: unknown, max = 200) =>
     typeof v === "string" && v.length <= max;
   const category = (v: unknown) =>
@@ -621,7 +662,7 @@ export function validateData(value: unknown): value is AppData {
   const list = (v: unknown): v is unknown[] =>
     Array.isArray(v) && v.length <= 20000;
   if (
-    d.version !== 1 ||
+    d.version !== version ||
     !list(d.tasks) ||
     !list(d.completions) ||
     !list(d.rewards) ||
@@ -651,7 +692,8 @@ export function validateData(value: unknown): value is AppData {
         weekStart(t.plannedWeek) === t.plannedWeek &&
         contribution(t.kind, t.category) &&
         amount(t.amount) &&
-        (!["interview", "course", "none"].includes(t.kind) || t.amount === 1) &&
+        (!["interview", "test", "course", "none"].includes(t.kind) ||
+          t.amount === 1) &&
         ["open", "done", "archived"].includes(t.status) &&
         text(t.createdAt, 50),
     )
@@ -679,7 +721,9 @@ export function validateData(value: unknown): value is AppData {
         text(r.id, 150) &&
         text(r.label) &&
         typeof r.amount === "number" &&
-        [5, 10, 20].includes(r.amount) &&
+        Number.isSafeInteger(r.amount) &&
+        r.amount >= 1 &&
+        r.amount <= 20 &&
         validDate(r.date) &&
         validDate(r.week) &&
         weekStart(r.week) === r.week,
@@ -747,7 +791,8 @@ export function validateData(value: unknown): value is AppData {
       task.kind !== completion.kind ||
       task.amount !== completion.amount ||
       !reward ||
-      reward.amount !== 5 ||
+      reward.amount !==
+        (version === 1 ? 5 : taskReward(task, completion.date)) ||
       reward.date !== completion.date ||
       reward.week !== completion.week ||
       reward.label !== completion.title
@@ -779,7 +824,7 @@ export function validateData(value: unknown): value is AppData {
     if (!match || match[1] !== reward.week) return false;
     const week = totals.get(reward.week);
     if (!week) return false;
-    const category = match[2];
+    const category = match[2] as "job" | "speech";
     // Added interviews can lower present progress after a legitimate reward was earned.
     // Only immutable quantities can be checked; do not require the current goal to be complete.
     if (
@@ -789,7 +834,8 @@ export function validateData(value: unknown): value is AppData {
     )
       return false;
     if (goal) {
-      if (reward.amount !== 20) return false;
+      if (reward.amount !== (version === 1 ? 20 : GOAL_REWARD[category]))
+        return false;
     } else {
       const tier = Number(match[3]);
       const maxTier =
@@ -799,11 +845,60 @@ export function validateData(value: unknown): value is AppData {
       if (
         !Number.isSafeInteger(tier) ||
         tier > maxTier ||
-        reward.amount !== (category === "job" ? 10 : 5) ||
+        reward.amount !==
+          (version === 1
+            ? category === "job"
+              ? 10
+              : 5
+            : TIER_REWARD[category]) ||
         !rewards.has(`goal:${reward.week}:${category}`)
       )
         return false;
     }
   }
   return true;
+}
+export function validateData(value: unknown): value is AppData {
+  return validateRecord(value, 2);
+}
+// Loads current records as they are; version 1 records are checked against the
+// old rules and then recomputed under the current table, as the user chose.
+// Old interview tasks titled as tests or written exams become `test`.
+export function upgradeData(value: unknown): AppData | null {
+  if (validateData(value)) return value;
+  if (!validateRecord(value, 1)) return null;
+  const legacy = value as Omit<AppData, "version">;
+  const kindOf = (task: Task): Contribution =>
+    task.kind === "interview" &&
+    inferContribution(task.title, "job").kind === "test"
+      ? "test"
+      : task.kind;
+  const tasks = legacy.tasks.map((task) => ({ ...task, kind: kindOf(task) }));
+  const byId = new Map(tasks.map((task) => [task.id, task]));
+  const completions = legacy.completions.map((item) => ({
+    ...item,
+    kind: byId.get(item.taskId)!.kind,
+  }));
+  const doneOn = new Map(completions.map((item) => [item.taskId, item.date]));
+  const rewards = legacy.rewards.map((reward) => {
+    if (reward.id.startsWith("task:")) {
+      const id = reward.id.slice(5);
+      return { ...reward, amount: taskReward(byId.get(id)!, doneOn.get(id)!) };
+    }
+    const category = reward.id.split(":")[2] as "job" | "speech";
+    return {
+      ...reward,
+      amount: reward.id.startsWith("goal:")
+        ? GOAL_REWARD[category]
+        : TIER_REWARD[category],
+    };
+  });
+  const upgraded: AppData = {
+    ...legacy,
+    version: 2,
+    tasks,
+    completions,
+    rewards,
+  };
+  return validateData(upgraded) ? upgraded : null;
 }

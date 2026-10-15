@@ -19,7 +19,7 @@ import {
   moveTasks,
   normalizeData,
   uncompleteTask,
-  validateData,
+  upgradeData,
   weekStart,
 } from "./domain.ts";
 import type { AppData, CalendarEvent, Task } from "./domain.ts";
@@ -154,7 +154,12 @@ export function TaskMenuSheet({
           </button>
         ) : (
           <>
-            <p>已完成并奖励5卡拉米。完成记录保留，不重复计分。</p>
+            <p>
+              已完成并获得
+              {data.rewards.find((item) => item.id === `task:${task.id}`)
+                ?.amount ?? 0}
+              卡拉米。完成记录保留，不重复计分。
+            </p>
             {data.completions.some(
               (item) => item.taskId === task.id && item.date === today,
             ) && (
@@ -453,8 +458,8 @@ export function SettingsSheet({
               e.target.value = "";
               try {
                 if (file.size > 10 * 1024 * 1024) throw new Error("too large");
-                const value: unknown = JSON.parse(await file.text());
-                if (!validateData(value)) throw new Error("invalid");
+                const value = upgradeData(JSON.parse(await file.text()));
+                if (!value) throw new Error("invalid");
                 if (
                   window.confirm(
                     "导入会替换当前记录。请先导出当前备份，确定导入吗？",
@@ -478,11 +483,13 @@ export function SettingsSheet({
       <div className="settings-section">
         <h3>奖励规则</h3>
         <p>
-          普通 / 课程任务 +5；求职、口语每周基础目标各 +20；求职额外每3份
-          +10；听力每10分钟 +5。基础目标完成后自动补领特别挑战奖励，未满一档不发分，也不跨周累计。
+          完成任务：普通任务 +2，简历投递 +4，测试/笔试 +8，粤语练习 +2，英语面试题 +4，听力 +2，课程作业 +1。面试按添加后第几天完成：0–3天 +12，4–6天 +4，7–10天 +2，更晚 +1，与截止日期无关。
         </p>
         <p>
-          香港揾工：本周投递15份简历，且本周安排的测试/面试全部完成。没有面试安排时进度只看简历；有面试安排时简历与面试各占一半。临时新增面试会让进度下降，但已发奖励不收回。提前完成的面试计入原计划周。大胆说口语：粤语30分钟×2次，以及英语面试题×9题。
+          每周目标：香港揾工 +10，超出15份后每3份 +4；大胆说口语 +7，听力每10分钟 +2。基础目标完成后自动补领挑战奖励，未满一档不发分，也不跨周累计。
+        </p>
+        <p>
+          香港揾工：本周投递15份简历，且本周安排的测试/笔试和面试全部完成。没有测试或面试安排时进度只看简历；有安排时简历与测试/面试各占一半。临时新增面试会让进度下降，但已发奖励不收回。提前完成的面试计入原计划周。大胆说口语：粤语30分钟×2次，以及英语面试题×9题。
         </p>
         <p>
           每周自动在待办生成：香港秋招简历x5（3条）、英语面试练习3题（3条）、粤语30分钟（2条）。自动安排时，每日先放一条简历，再放普通任务，列表不到3条时加一条英语（英语做完后才轮到粤语）；同一系列每天只安排一条，英语和粤语不同天出现。手动安排时不套用这些规则。新的一周开始时，上周未完成的自动任务移入「已清空」，可恢复。

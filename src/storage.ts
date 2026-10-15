@@ -1,4 +1,4 @@
-import { emptyData, validateData } from "./domain.ts";
+import { emptyData, upgradeData, validateData } from "./domain.ts";
 import type { AppData } from "./domain.ts";
 
 export const STORAGE_KEY = "you-did:v1";
@@ -26,8 +26,10 @@ export function loadData(storage: Store): Snapshot {
   try {
     raw = storage.getItem(STORAGE_KEY);
     if (raw === null) return { data: emptyData(), error: "", raw: null };
-    const data: unknown = JSON.parse(raw);
-    if (!validateData(data)) throw new Error("invalid");
+    // Older versions are upgraded in memory; the stored text is rewritten only by
+    // the next real save, so conflict checks still compare against what is stored.
+    const data = upgradeData(JSON.parse(raw));
+    if (!data) throw new Error("invalid");
     return { data, error: "", raw };
   } catch {
     return {

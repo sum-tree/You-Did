@@ -16,6 +16,7 @@ import {
   normalizeData,
   saveTask,
   uncompleteTask,
+  upgradeData,
   settleRewards,
   validateData,
   validDate,
@@ -25,7 +26,7 @@ import {
 
 const day = "2026-10-12";
 function task(id, kind = "none", amount = 1, extra = {}) {
-  const category = ["resume", "interview"].includes(kind)
+  const category = ["resume", "interview", "test"].includes(kind)
     ? "job"
     : ["cantonese", "english", "listening"].includes(kind)
       ? "speech"
@@ -59,10 +60,10 @@ test("local dates and Monday weeks are stable across Sunday and year boundaries"
   assert.equal(validDate("2026-02-30"), false);
   assert.equal(validDate("2028-02-29"), true);
 });
-test("ordinary/course completion receives exactly five and is idempotent", () => {
+test("course completion receives its single reward and is idempotent", () => {
   const data = dataWith(task("course", "course"));
   const done = completeTask(data, "course", day);
-  assert.equal(balance(done), 5);
+  assert.equal(balance(done), 1);
   assert.equal(done.completions.length, 1);
   assert.deepEqual(completeTask(done, "course", day), done);
   assert.equal(validateData(done), true);
@@ -70,41 +71,41 @@ test("ordinary/course completion receives exactly five and is idempotent", () =>
 test("task contribution records quantity rather than task count", () => {
   const done = completeTask(dataWith(task("cv", "resume", 3)), "cv", day);
   assert.equal(weekStats(done, day).resumes, 3);
-  assert.equal(balance(done), 5);
+  assert.equal(balance(done), 4);
 });
 test("job target needs 15 resumes AND all scheduled interviews", () => {
   let data = dataWith(task("cv", "resume", 15), task("interview", "interview"));
   data = completeTask(data, "cv", day);
   assert.equal(weekStats(data, day).jobPercent, 50);
-  assert.equal(balance(data), 5);
+  assert.equal(balance(data), 4);
   data = completeTask(data, "interview", day);
   assert.equal(weekStats(data, day).jobPercent, 100);
-  assert.equal(balance(data), 30);
+  assert.equal(balance(data), 26);
   assert.equal(settleRewards(data, day, day).rewards.length, 3);
 });
 test("no scheduled interview means that condition is already satisfied", () => {
   const data = completeTask(dataWith(task("cv", "resume", 15)), "cv", day);
   assert.equal(weekStats(data, day).interviewTotal, 0);
   assert.equal(weekStats(data, day).jobComplete, true);
-  assert.equal(balance(data), 25);
+  assert.equal(balance(data), 14);
 });
 test("job challenges accumulate early and are paid after base target completion", () => {
   let data = dataWith(task("cv", "resume", 22), task("interview", "interview"));
   data = completeTask(data, "cv", day);
-  assert.equal(balance(data), 5);
+  assert.equal(balance(data), 4);
   data = completeTask(data, "interview", day);
-  assert.equal(balance(data), 50); // two task rewards, base 20, two extra tiers 20
+  assert.equal(balance(data), 34); // resume 4, interview 12, base 10, two extra tiers 8
   assert.equal(weekStats(data, day).jobTiers, 2);
-  assert.equal(balance(settleRewards(data, day, day)), 50);
+  assert.equal(balance(settleRewards(data, day, day)), 34);
 });
 test("new interview recalculates progress without retracting or reissuing rewards", () => {
   let data = completeTask(dataWith(task("cv", "resume", 18)), "cv", day);
-  assert.equal(balance(data), 35);
+  assert.equal(balance(data), 18);
   data = saveTask(data, task("late", "interview"), day);
   assert.equal(weekStats(data, day).jobPercent, 50);
-  assert.equal(balance(data), 35);
+  assert.equal(balance(data), 18);
   data = completeTask(data, "late", day);
-  assert.equal(balance(data), 40);
+  assert.equal(balance(data), 30);
   assert.equal(
     data.rewards.filter((r) => r.id === `goal:${day}:job`).length,
     1,
@@ -117,10 +118,10 @@ test("oral goal requires two 30-minute sessions and nine questions", () => {
   );
   data = completeTask(data, "cantonese", day);
   assert.equal(weekStats(data, day).speechPercent, 50);
-  assert.equal(balance(data), 5);
+  assert.equal(balance(data), 2);
   data = completeTask(data, "english", day);
   assert.equal(weekStats(data, day).speechPercent, 100);
-  assert.equal(balance(data), 30);
+  assert.equal(balance(data), 13);
 });
 test("listening is accumulated in whole ten-minute tiers and retroactively paid", () => {
   let data = dataWith(
@@ -129,12 +130,12 @@ test("listening is accumulated in whole ten-minute tiers and retroactively paid"
     task("e", "english", 9),
   );
   data = completeTask(data, "listen", day);
-  assert.equal(balance(data), 5);
+  assert.equal(balance(data), 2);
   data = finishAll(data, ["c", "e"]);
-  assert.equal(balance(data), 45);
+  assert.equal(balance(data), 19);
   data = saveTask(data, task("listen2", "listening", 5), day);
   data = completeTask(data, "listen2", day);
-  assert.equal(balance(data), 55); // new task +5, third listening tier +5
+  assert.equal(balance(data), 23); // new task +2, third listening tier +2
 });
 test("a near-complete goal never rounds up to 100 percent", () => {
   const data = completeTask(dataWith(task("cv", "resume", 14)), "cv", day);
@@ -147,7 +148,7 @@ test("completion counts in actual week and base rewards can occur in different w
   data = completeTask(data, "week2", "2026-10-19");
   assert.equal(weekStats(data, day).resumes, 15);
   assert.equal(weekStats(data, "2026-10-19").resumes, 15);
-  assert.equal(balance(data), 50);
+  assert.equal(balance(data), 28);
 });
 test("a carried interview counts in the completion week", () => {
   const data = completeTask(
@@ -172,12 +173,12 @@ test("archiving and carrying open tasks preserve ledger and completed tasks", ()
     "2026-10-19",
   );
   assert.equal(moved.tasks.find((t) => t.id === "done").plannedWeek, day);
-  assert.equal(balance(moved), 5);
+  assert.equal(balance(moved), 1);
   assert.deepEqual(moved.daily[day], []);
   const cleared = archiveTasks(data, ["open", "done"]);
   assert.equal(cleared.tasks.find((t) => t.id === "done").status, "done");
   assert.equal(cleared.tasks.find((t) => t.id === "open").status, "archived");
-  assert.equal(balance(cleared), 5);
+  assert.equal(balance(cleared), 1);
 });
 test("moving deadlines earlier than next week sets them to next Monday", () => {
   const data = moveTasks(
@@ -349,7 +350,7 @@ test("valid backups retain earned rewards when a new interview lowers progress",
   let data = completeTask(dataWith(task("cv", "resume", 18)), "cv", day);
   data = saveTask(data, task("new-interview", "interview"), day);
   assert.equal(weekStats(data, day).jobPercent, 50);
-  assert.equal(balance(data), 35);
+  assert.equal(balance(data), 18);
   assert.equal(validateData(data), true);
 });
 
@@ -361,7 +362,7 @@ test("historical daily plans may reference completed and archived tasks", () => 
 });
 
 test("single-unit contribution kinds reject unsupported backup amounts", () => {
-  for (const kind of ["interview", "course", "none"]) {
+  for (const kind of ["interview", "test", "course", "none"]) {
     assert.equal(validateData(dataWith(task("a", kind, 2))), false);
   }
 });
@@ -385,9 +386,9 @@ test("an interview completed before its planned week satisfies that week", () =>
 test("moving the last open interview away settles the now-met goal", () => {
   let data = dataWith(task("cv", "resume", 15), task("interview", "interview"));
   data = completeTask(data, "cv", "2026-10-13");
-  assert.equal(balance(data), 5);
+  assert.equal(balance(data), 4);
   data = moveTasks(data, ["interview"], "2026-10-14");
-  assert.equal(balance(data), 25);
+  assert.equal(balance(data), 14);
   const goal = data.rewards.find((r) => r.id === `goal:${day}:job`);
   assert.equal(goal.date, "2026-10-14");
   assert.equal(validateData(data), true);
@@ -441,7 +442,8 @@ test("task titles determine the goal contribution and quantity", () => {
     ["投递3份简历", "job", "resume", 3],
     ["改简历", "job", "resume", 1],
     ["准备汇丰面试", "job", "interview", 1],
-    ["完成在线测试", "job", "interview", 1],
+    ["完成在线测试", "job", "test", 1],
+    ["汇丰笔试", "job", "test", 1],
     ["整理求职笔记", "job", "none", 1],
     ["粤语练习2次", "speech", "cantonese", 2],
     ["粤语对话60分钟", "speech", "cantonese", 2],
@@ -559,7 +561,7 @@ test("a task completed today can be undone and loses its own reward", () => {
 });
 test("undo revokes the goal and tiers that completion produced today", () => {
   const data = completeTask(dataWith(task("cv", "resume", 18)), "cv", day);
-  assert.equal(balance(data), 35);
+  assert.equal(balance(data), 18);
   const undone = uncompleteTask(data, "cv", day);
   assert.equal(balance(undone), 0);
   assert.equal(validateData(undone), true);
@@ -568,27 +570,27 @@ test("undo keeps rewards earned on earlier days", () => {
   let data = dataWith(task("cv1", "resume", 15), task("cv2", "resume", 3));
   data = completeTask(data, "cv1", day);
   data = completeTask(data, "cv2", nextDay);
-  assert.equal(balance(data), 40);
+  assert.equal(balance(data), 22);
   const undone = uncompleteTask(data, "cv2", nextDay);
-  assert.equal(balance(undone), 25);
+  assert.equal(balance(undone), 14);
   assert.equal(undone.rewards.some((r) => r.id === `goal:${day}:job`), true);
   assert.equal(validateData(undone), true);
 });
 test("undoing the interview that completed the goal revokes it", () => {
   let data = dataWith(task("cv", "resume", 15), task("iv", "interview"));
   data = finishAll(data, ["cv", "iv"]);
-  assert.equal(balance(data), 30);
+  assert.equal(balance(data), 26);
   const undone = uncompleteTask(data, "iv", day);
-  assert.equal(balance(undone), 5);
+  assert.equal(balance(undone), 4);
   assert.equal(weekStats(undone, day).jobComplete, false);
   assert.equal(validateData(undone), true);
 });
 test("undoing an unrelated task never touches goal rewards", () => {
   let data = finishAll(dataWith(task("cv", "resume", 15), task("hw", "course")), ["cv", "hw"]);
   data = saveTask(data, task("late", "interview"), day);
-  assert.equal(balance(data), 30);
+  assert.equal(balance(data), 15);
   const undone = uncompleteTask(data, "hw", day);
-  assert.equal(balance(undone), 25);
+  assert.equal(balance(undone), 14);
   assert.equal(undone.rewards.some((r) => r.id === `goal:${day}:job`), true);
   assert.equal(validateData(undone), true);
 });
@@ -601,12 +603,12 @@ test("undoing speaking and listening revokes only the unsupported part", () => {
   );
   data = finishAll(data, ["c", "e", "l1"]);
   data = completeTask(data, "l2", nextDay);
-  assert.equal(balance(data), 50); // four tasks 20, goal 20, two listening tiers 10
+  assert.equal(balance(data), 21); // tasks 2+4+2+2, goal 7, two listening tiers 4
   const lessListening = uncompleteTask(data, "l2", nextDay);
-  assert.equal(balance(lessListening), 40);
+  assert.equal(balance(lessListening), 17);
   assert.equal(validateData(lessListening), true);
   const noGoal = uncompleteTask(lessListening, "e", day);
-  assert.equal(balance(noGoal), 10);
+  assert.equal(balance(noGoal), 4);
   assert.equal(validateData(noGoal), true);
 });
 test("an undone weekly task returns to today's plan", () => {
@@ -624,4 +626,89 @@ test("without scheduled interviews job progress follows resumes only", () => {
   assert.equal(weekStats(full, day).jobPercent, 100);
   const withInterview = dataWith(task("iv", "interview"));
   assert.equal(weekStats(withInterview, day).jobPercent, 0);
+});
+test("each kind of task earns its own reward", () => {
+  const cases = [
+    ["none", 1, 2],
+    ["resume", 3, 4],
+    ["test", 1, 8],
+    ["cantonese", 1, 2],
+    ["english", 3, 4],
+    ["listening", 5, 2],
+    ["course", 1, 1],
+  ];
+  for (const [kind, amount, reward] of cases) {
+    const done = completeTask(dataWith(task("x", kind, amount)), "x", day);
+    assert.equal(balance(done), reward, kind);
+    assert.equal(validateData(done), true, kind);
+  }
+});
+test("interview reward depends on days since it was added, not on its DDL", () => {
+  const created = { createdAt: "2026-10-12T09:00:00", dueDate: "2026-10-30" };
+  for (const [date, reward] of [
+    ["2026-10-12", 12],
+    ["2026-10-15", 12],
+    ["2026-10-16", 4],
+    ["2026-10-18", 4],
+    ["2026-10-19", 2],
+    ["2026-10-22", 2],
+    ["2026-10-23", 1],
+  ]) {
+    const done = completeTask(dataWith(task("iv", "interview", 1, created)), "iv", date);
+    assert.equal(done.rewards.find((r) => r.id === "task:iv").amount, reward, date);
+    assert.equal(validateData(done), true, date);
+  }
+  const forged = completeTask(dataWith(task("iv", "interview", 1, created)), "iv", "2026-10-23");
+  forged.rewards[0].amount = 12;
+  assert.equal(validateData(forged), false);
+});
+test("tests and written exams gate the job goal like interviews", () => {
+  let data = dataWith(task("cv", "resume", 15), task("t", "test"));
+  data = completeTask(data, "cv", day);
+  assert.equal(weekStats(data, day).jobComplete, false);
+  assert.equal(weekStats(data, day).jobPercent, 50);
+  data = completeTask(data, "t", day);
+  assert.equal(weekStats(data, day).jobComplete, true);
+  assert.equal(balance(data), 4 + 8 + 10);
+  const undone = uncompleteTask(data, "t", day);
+  assert.equal(balance(undone), 4);
+});
+test("version 1 records are recomputed under the new reward rules", () => {
+  const legacy = {
+    version: 1,
+    tasks: [
+      { ...task("cv", "resume", 18), status: "done" },
+      { ...task("t", "interview", 1, { title: "在线测试" }), status: "done" },
+      { ...task("c", "course"), status: "done" },
+    ],
+    completions: [
+      { taskId: "cv", title: "任务 cv", category: "job", kind: "resume", amount: 18, date: day, week: day },
+      { taskId: "t", title: "在线测试", category: "job", kind: "interview", amount: 1, date: day, week: day },
+      { taskId: "c", title: "任务 c", category: "course", kind: "course", amount: 1, date: day, week: day },
+    ],
+    rewards: [
+      { id: "task:cv", amount: 5, label: "任务 cv", date: day, week: day },
+      { id: "task:t", amount: 5, label: "在线测试", date: day, week: day },
+      { id: "task:c", amount: 5, label: "任务 c", date: day, week: day },
+      { id: `goal:${day}:job`, amount: 20, label: "香港揾工 · 本周基础目标", date: day, week: day },
+      { id: `bonus:${day}:job:1`, amount: 10, label: "额外", date: day, week: day },
+    ],
+    daily: {},
+    events: [],
+    courseWeek: 6,
+  };
+  assert.equal(validateData(legacy), false);
+  const upgraded = upgradeData(legacy);
+  assert.equal(upgraded.version, 2);
+  assert.equal(upgraded.tasks.find((t) => t.id === "t").kind, "test");
+  assert.equal(upgraded.completions.find((c) => c.taskId === "t").kind, "test");
+  assert.deepEqual(
+    upgraded.rewards.map((r) => [r.id, r.amount]),
+    [["task:cv", 4], ["task:t", 8], ["task:c", 1], [`goal:${day}:job`, 10], [`bonus:${day}:job:1`, 4]],
+  );
+  assert.equal(validateData(upgraded), true);
+  const current = completeTask(dataWith(task("a")), "a", day);
+  assert.equal(upgradeData(current), current);
+  assert.equal(upgradeData({ ...legacy, rewards: [] }), null);
+  assert.equal(upgradeData("broken"), null);
 });

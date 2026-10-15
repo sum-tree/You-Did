@@ -237,3 +237,40 @@ test("invalid mutations are rejected before any write", async () => {
   assert.equal(result.status, "error");
   assert.equal(storage.getItem(STORAGE_KEY), null);
 });
+test("version 1 records load upgraded, are kept as stored, and save as version 2", async () => {
+  const legacy = {
+    version: 1,
+    tasks: [
+      {
+        id: "a",
+        title: "整理笔记",
+        category: "course",
+        priority: 1,
+        dueDate: "",
+        plannedWeek: "2026-10-12",
+        kind: "none",
+        amount: 1,
+        status: "done",
+        createdAt: "2026-10-12T09:00:00",
+      },
+    ],
+    completions: [
+      { taskId: "a", title: "整理笔记", category: "course", kind: "none", amount: 1, date: "2026-10-12", week: "2026-10-12" },
+    ],
+    rewards: [{ id: "task:a", amount: 5, label: "整理笔记", date: "2026-10-12", week: "2026-10-12" }],
+    daily: {},
+    events: [],
+    courseWeek: 6,
+  };
+  const raw = JSON.stringify(legacy);
+  const storage = store(raw);
+  const loaded = loadData(storage);
+  assert.equal(loaded.error, "");
+  assert.equal(loaded.raw, raw);
+  assert.equal(loaded.data.version, 2);
+  assert.equal(loaded.data.rewards[0].amount, 2);
+  assert.equal(storage.values.get(STORAGE_KEY), raw);
+  const result = await saveChange(storage, locks(), loaded, (previous) => ({ ...previous, courseWeek: 7 }));
+  assert.equal(result.status, "saved");
+  assert.equal(JSON.parse(storage.values.get(STORAGE_KEY)).version, 2);
+});
