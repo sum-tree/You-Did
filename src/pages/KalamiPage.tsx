@@ -56,49 +56,160 @@ const JAR_OUTLINE =
 const JAR_INSIDE =
   "M 88,52 V 64 C 60,66 32,78 32,98 V 276 C 32,295 48,304 68,304 H 192 C 212,304 228,295 228,276 V 98 C 228,78 200,66 172,64 V 52 Z";
 
-// Stable geometric resting coordinates for initial paint and fallback
-const ROW_CONFIG: { count: number; y: number; startX: number; stepX: number }[] = [
-  { count: 7, y: 270, startX: 58, stepX: 24 },
-  { count: 7, y: 255, startX: 53, stepX: 25.6 },
-  { count: 7, y: 240, startX: 58, stepX: 24 },
-  { count: 7, y: 225, startX: 53, stepX: 25.6 },
-  { count: 7, y: 210, startX: 58, stepX: 24 },
-  { count: 7, y: 195, startX: 53, stepX: 25.6 },
-  { count: 7, y: 180, startX: 58, stepX: 24 },
-  { count: 7, y: 165, startX: 53, stepX: 25.6 },
-  { count: 7, y: 150, startX: 58, stepX: 24 },
-  { count: 7, y: 135, startX: 53, stepX: 25.6 },
-  { count: 7, y: 120, startX: 58, stepX: 24 },
-  { count: 6, y: 106, startX: 68, stepX: 24.8 },
-  { count: 5, y: 92,  startX: 78, stepX: 26 },
-  { count: 4, y: 78,  startX: 91, stepX: 26 },
-  { count: 1, y: 65,  startX: 130, stepX: 0 },
+const D = 22.0;
+const R = D / 2;
+const FLOOR = 270.0;
+const H = Math.sqrt(D * D - R * R); // 19.05256
+
+// Pure hexagonal staggered pocket rows: non-overlapping and mechanically stable in gravity
+const ROW_DEFS: { count: number; x0: number; y: number }[] = [
+  { count: 7, x0: 64,  y: 270.0 },
+  { count: 8, x0: 53,  y: 270.0 - 1 * H },
+  { count: 7, x0: 64,  y: 270.0 - 2 * H },
+  { count: 8, x0: 53,  y: 270.0 - 3 * H },
+  { count: 7, x0: 64,  y: 270.0 - 4 * H },
+  { count: 8, x0: 53,  y: 270.0 - 5 * H },
+  { count: 7, x0: 64,  y: 270.0 - 6 * H },
+  { count: 8, x0: 53,  y: 270.0 - 7 * H },
+  { count: 7, x0: 64,  y: 270.0 - 8 * H },
+  { count: 8, x0: 53,  y: 270.0 - 9 * H },
+  { count: 7, x0: 64,  y: 270.0 - 10 * H },
+  { count: 6, x0: 75,  y: 270.0 - 11 * H },
+  { count: 5, x0: 86,  y: 270.0 - 12 * H },
+  { count: 4, x0: 97,  y: 270.0 - 13 * H },
+  { count: 3, x0: 108, y: 270.0 - 14 * H },
+  { count: 2, x0: 119, y: 270.0 - 15 * H },
+  { count: 1, x0: 130, y: 270.0 - 16 * H },
 ];
 
 function restingSlot(index: number) {
   let remaining = index % JAR_SIZE;
-  let cfg = ROW_CONFIG[0];
+  let rDef = ROW_DEFS[0];
   let col = 0;
-  for (let r = 0; r < ROW_CONFIG.length; r++) {
-    const row = ROW_CONFIG[r];
+  for (let r = 0; r < ROW_DEFS.length; r++) {
+    const row = ROW_DEFS[r];
     if (remaining < row.count) {
-      cfg = row;
+      rDef = row;
       col = remaining;
       break;
     }
     remaining -= row.count;
   }
   const hash = (index * 2654435761) >>> 0;
-  const jitterX = ((hash % 7) - 3) * 0.6;
-  const jitterY = (((hash >>> 3) % 5) - 2) * 0.4;
-  const turn = (((hash >>> 6) % 19) - 9) * 0.8;
+  const turn = (((hash >>> 6) % 25) - 12) * 1.5;
 
   return {
-    x: cfg.startX + col * cfg.stepX + jitterX,
-    y: cfg.y + jitterY,
+    x: rDef.x0 + col * D,
+    y: rDef.y,
     turn,
     color: getBalancedColor(index),
   };
+}
+
+function constrainJarPhysics(p: { x: number; y: number; vx: number; vy: number; rot: number; omega: number }) {
+  const e = 0.35; // bouncy restitution
+  // 1. Floor
+  if (p.y > FLOOR) {
+    p.y = FLOOR;
+    if (p.vy > 0) {
+      p.vy = -p.vy * e;
+      const slip = p.vx;
+      p.vx *= 0.82;
+      p.omega += (slip / R) * 3.5;
+    }
+  }
+
+  // 2. Corner fillets and vertical walls
+  if (p.y >= 98) {
+    if (p.y > 248 && p.x < 62) {
+      const dx = p.x - 62;
+      const dy = p.y - 248;
+      const d = Math.hypot(dx, dy);
+      if (d > 22 && d > 0.001) {
+        const nx = dx / d;
+        const ny = dy / d;
+        p.x = 62 + nx * 22;
+        p.y = 248 + ny * 22;
+        const vn = p.vx * nx + p.vy * ny;
+        if (vn > 0) {
+          p.vx -= (1 + e) * vn * nx;
+          p.vy -= (1 + e) * vn * ny;
+          p.omega += (-p.vx * ny + p.vy * nx) * 0.3;
+        }
+      }
+    } else if (p.y > 248 && p.x > 198) {
+      const dx = p.x - 198;
+      const dy = p.y - 248;
+      const d = Math.hypot(dx, dy);
+      if (d > 22 && d > 0.001) {
+        const nx = dx / d;
+        const ny = dy / d;
+        p.x = 198 + nx * 22;
+        p.y = 248 + ny * 22;
+        const vn = p.vx * nx + p.vy * ny;
+        if (vn > 0) {
+          p.vx -= (1 + e) * vn * nx;
+          p.vy -= (1 + e) * vn * ny;
+          p.omega += (-p.vx * ny + p.vy * nx) * 0.3;
+        }
+      }
+    } else {
+      if (p.x < 32 + R) {
+        p.x = 32 + R;
+        if (p.vx < 0) {
+          p.vx = -p.vx * e;
+          p.omega -= (p.vy / R) * 3;
+        }
+      }
+      if (p.x > 228 - R) {
+        p.x = 228 - R;
+        if (p.vx > 0) {
+          p.vx = -p.vx * e;
+          p.omega += (p.vy / R) * 3;
+        }
+      }
+    }
+  } else if (p.y >= 64) {
+    // 3. Shoulders slope
+    const leftLimit = 88 - (p.y - 64) * 1.65 + R;
+    const rightLimit = 172 + (p.y - 64) * 1.65 - R;
+    if (p.x < leftLimit) {
+      p.x = leftLimit;
+      if (p.vx < 0) {
+        p.vx = -p.vx * e;
+        p.vy *= 0.85;
+      }
+    }
+    if (p.x > rightLimit) {
+      p.x = rightLimit;
+      if (p.vx > 0) {
+        p.vx = -p.vx * e;
+        p.vy *= 0.85;
+      }
+    }
+  } else {
+    // 4. Neck slot
+    if (p.x < 88 + R) {
+      p.x = 88 + R;
+      if (p.vx < 0) p.vx = -p.vx * e;
+    }
+    if (p.x > 172 - R) {
+      p.x = 172 - R;
+      if (p.vx > 0) p.vx = -p.vx * e;
+    }
+  }
+}
+
+interface BallPhysics {
+  x: number;
+  y: number;
+  vx: number;
+  vy: number;
+  rot: number;
+  omega: number;
+  color: (typeof COLORS)[number];
+  active: boolean;
+  spawnTime: number;
 }
 
 function readSeen(): number | null {
@@ -124,7 +235,7 @@ export function KalamiPage({ data }: { data: AppData }) {
   const inJar = total - fullJars * JAR_SIZE;
   const jarStart = fullJars * JAR_SIZE;
 
-  // Determine newly earned kalami since last viewed; first visit is calm
+  // Determine newly earned kalami since last viewed
   const [dropFrom, setDropFrom] = useState(() => {
     const seen = readSeen();
     return seen === null || seen >= total ? total : seen;
@@ -138,73 +249,288 @@ export function KalamiPage({ data }: { data: AppData }) {
   );
   const [jarThump, setJarThump] = useState(false);
   const [jarWobble, setJarWobble] = useState(false);
-  const [isBouncing, setIsBouncing] = useState(false);
-  const [tiltX, setTiltX] = useState(0);
 
-  const bounceTimer = useRef<number | null>(null);
+  const ballsRef = useRef<BallPhysics[]>([]);
+  const blobGroupRefs = useRef<(SVGGElement | null)[]>([]);
+  const rafId = useRef<number | null>(null);
+  const isSimulatingRef = useRef(false);
 
-  // When new kalami drop in, run Option C ceremony then seal the cork
+  // Gravity vectors (dynamic from phone gyro tilt)
+  const tiltGx = useRef(0);
+  const tiltGy = useRef(0.28);
+  const lastWakeTime = useRef(0);
+
+  const wakeUp = () => {
+    lastWakeTime.current = Date.now();
+    if (isSimulatingRef.current) return;
+    isSimulatingRef.current = true;
+
+    let calmFrames = 0;
+
+    const tick = () => {
+      const now = Date.now();
+      const balls = ballsRef.current;
+      let totalMotion = 0;
+
+      // 1. Spawning check (sequential relaxed drop)
+      balls.forEach((b, i) => {
+        if (!b.active && now >= b.spawnTime) {
+          b.active = true;
+          const el = blobGroupRefs.current[i];
+          if (el) el.style.opacity = "1";
+        }
+      });
+
+      // 2. Integration
+      const gx = tiltGx.current;
+      const gy = tiltGy.current;
+
+      for (let i = 0; i < balls.length; i++) {
+        const b = balls[i];
+        if (!b.active) continue;
+
+        b.vx += gx;
+        b.vy += gy;
+        b.vx *= 0.985;
+        b.vy *= 0.985;
+        b.omega *= 0.96;
+
+        b.x += b.vx;
+        b.y += b.vy;
+        b.rot += b.omega;
+
+        constrainJarPhysics(b);
+        totalMotion += Math.hypot(b.vx, b.vy);
+      }
+
+      // 3. Circle-to-Circle Collision (3 relaxation iterations with rolling friction)
+      for (let pass = 0; pass < 3; pass++) {
+        for (let i = 0; i < balls.length; i++) {
+          const b1 = balls[i];
+          if (!b1.active) continue;
+
+          for (let j = i + 1; j < balls.length; j++) {
+            const b2 = balls[j];
+            if (!b2.active) continue;
+
+            const dx = b2.x - b1.x;
+            const dy = b2.y - b1.y;
+            const d2 = dx * dx + dy * dy;
+
+            if (d2 < D * D && d2 > 0.0001) {
+              const d = Math.sqrt(d2);
+              const nx = dx / d;
+              const ny = dy / d;
+              const overlap = (D - d) * 0.5;
+
+              b1.x -= nx * overlap;
+              b1.y -= ny * overlap;
+              b2.x += nx * overlap;
+              b2.y += ny * overlap;
+
+              const vrelN = (b2.vx - b1.vx) * nx + (b2.vy - b1.vy) * ny;
+              if (vrelN < 0) {
+                const impulseN = -(1 + 0.35) * vrelN * 0.5;
+                b1.vx -= nx * impulseN;
+                b1.vy -= ny * impulseN;
+                b2.vx += nx * impulseN;
+                b2.vy += ny * impulseN;
+
+                // Tangential friction causing natural rolling & slope tumbling
+                const tx = -ny;
+                const ty = nx;
+                const vrelT = (b2.vx - b1.vx) * tx + (b2.vy - b1.vy) * ty;
+                const impulseT = -vrelT * 0.16 * 0.5;
+                b1.vx -= tx * impulseT;
+                b1.vy -= ty * impulseT;
+                b2.vx += tx * impulseT;
+                b2.vy += ty * impulseT;
+
+                const dOmega = (impulseT / R) * (180 / Math.PI);
+                b1.omega -= dOmega * 0.35;
+                b2.omega -= dOmega * 0.35;
+              }
+            }
+          }
+        }
+      }
+
+      // 4. Update SVG DOM directly
+      balls.forEach((b, i) => {
+        if (!b.active) return;
+        const el = blobGroupRefs.current[i];
+        if (el) {
+          el.setAttribute(
+            "transform",
+            `translate(${b.x.toFixed(1)} ${b.y.toFixed(1)}) rotate(${b.rot.toFixed(1)})`
+          );
+        }
+      });
+
+      // 5. Sleep & Ceremony completion check
+      const allActive = balls.every((b) => b.active);
+      const isCalm = totalMotion < balls.length * 0.08;
+
+      if (allActive && isCalm) {
+        calmFrames++;
+      } else {
+        calmFrames = 0;
+      }
+
+      // Settle if calm for 25 frames and at least 600ms has elapsed since last wake
+      if (calmFrames > 25 && now - lastWakeTime.current > 600) {
+        isSimulatingRef.current = false;
+        if (hasNew) {
+          setCorkState("closing");
+          setTimeout(() => {
+            setCorkState("closed");
+            setJarThump(true);
+            setTimeout(() => setJarThump(false), 350);
+            writeSeen(total);
+            setDropFrom(total);
+          }, 700);
+        }
+        return; // Physics loop sleeps
+      }
+
+      rafId.current = requestAnimationFrame(tick);
+    };
+
+    rafId.current = requestAnimationFrame(tick);
+  };
+
+  // Initialize or re-initialize balls
   useEffect(() => {
-    if (!hasNew) {
-      writeSeen(total);
-      return;
+    const balls: BallPhysics[] = [];
+    const now = Date.now();
+
+    for (let i = 0; i < inJar; i++) {
+      const initial = restingSlot(i);
+      const isNew = hasNew && i >= newStartIndex;
+
+      if (!isNew) {
+        // Pre-settled at bottom in stable mechanical equilibrium (no jumping on load!)
+        balls.push({
+          x: initial.x,
+          y: initial.y,
+          vx: 0,
+          vy: 0,
+          rot: initial.turn,
+          omega: 0,
+          color: initial.color,
+          active: true,
+          spawnTime: 0,
+        });
+      } else {
+        // Option C ceremony: slow sequential entry
+        const delayMs = 850 + (i - newStartIndex) * 420;
+        const hash = (i * 2654435761) >>> 0;
+        balls.push({
+          x: 130 + (((hash >>> 3) % 9) - 4) * 1.5,
+          y: 30,
+          vx: (((hash >>> 7) % 7) - 3) * 0.25,
+          vy: 1.2,
+          rot: (((hash >>> 11) % 25) - 12) * 2,
+          omega: (((hash >>> 15) % 11) - 5) * 1.2,
+          color: getBalancedColor(i),
+          active: false,
+          spawnTime: now + delayMs,
+        });
+      }
     }
 
-    const newCount = inJar - newStartIndex;
-    const totalDropTime = Math.min(newCount, 20) * 110 + 950;
+    ballsRef.current = balls;
 
-    const timer = setTimeout(() => {
-      setCorkState("closing");
-      setTimeout(() => {
-        setCorkState("closed");
-        setJarThump(true);
-        setTimeout(() => setJarThump(false), 350);
-        writeSeen(total);
-        setDropFrom(total);
-      }, 350);
-    }, totalDropTime);
+    // Apply immediate transform to DOM refs
+    balls.forEach((b, i) => {
+      const el = blobGroupRefs.current[i];
+      if (el) {
+        el.setAttribute(
+          "transform",
+          `translate(${b.x.toFixed(1)} ${b.y.toFixed(1)}) rotate(${b.rot.toFixed(1)})`
+        );
+        el.style.opacity = b.active ? "1" : "0";
+      }
+    });
 
-    return () => clearTimeout(timer);
-  }, [hasNew, inJar, newStartIndex, total]);
+    if (hasNew) {
+      wakeUp();
+    } else {
+      isSimulatingRef.current = false;
+      writeSeen(total);
+    }
 
-  // Mobile Device Orientation (Gyro tilt response)
+    return () => {
+      if (rafId.current) cancelAnimationFrame(rafId.current);
+      isSimulatingRef.current = false;
+    };
+  }, [inJar, total, dropFrom, jarStart, hasNew, newStartIndex]);
+
+  // Mobile Device Orientation (Gyro tilt response) & Motion Shake
   useEffect(() => {
-    let lastTilt = 0;
+    let lastGamma = 0;
     const handleOrientation = (e: DeviceOrientationEvent) => {
       if (e.gamma !== null) {
-        const clamped = Math.max(-24, Math.min(24, e.gamma));
-        const targetTilt = (clamped / 24) * 6; // max 6px gentle sway
-        if (Math.abs(targetTilt - lastTilt) > 0.3) {
-          lastTilt = targetTilt;
-          setTiltX(targetTilt);
+        // Left-right tilt angle (-45 to +45 deg)
+        const gamma = Math.max(-45, Math.min(45, e.gamma));
+        if (Math.abs(gamma - lastGamma) > 1.2) {
+          lastGamma = gamma;
+          const rad = (gamma * Math.PI) / 180;
+          tiltGx.current = Math.sin(rad) * 0.32;
+          tiltGy.current = Math.cos(rad) * 0.32;
+          wakeUp();
+        }
+      }
+    };
+
+    let lastShake = 0;
+    const handleMotion = (e: DeviceMotionEvent) => {
+      const acc = e.accelerationIncludingGravity;
+      if (acc && acc.x !== null && acc.y !== null && acc.z !== null) {
+        const delta = Math.abs(acc.x) + Math.abs(acc.y) + Math.abs(acc.z);
+        if (delta > 22 && Date.now() - lastShake > 600) {
+          lastShake = Date.now();
+          ballsRef.current.forEach((b) => {
+            b.vy -= Math.random() * 3.8 + 2.5;
+            b.vx += (Math.random() - 0.5) * 3.5;
+            b.omega += (Math.random() - 0.5) * 22;
+          });
+          wakeUp();
         }
       }
     };
 
     window.addEventListener("deviceorientation", handleOrientation);
-    return () => window.removeEventListener("deviceorientation", handleOrientation);
+    window.addEventListener("devicemotion", handleMotion);
+    return () => {
+      window.removeEventListener("deviceorientation", handleOrientation);
+      window.removeEventListener("devicemotion", handleMotion);
+    };
   }, []);
 
   // Tap / Click Interaction: Jumble & bounce the jellies
   const handleJarTap = () => {
-    if (isBouncing) return;
-    setIsBouncing(true);
+    if (jarWobble) return;
     setJarWobble(true);
+    setTimeout(() => setJarWobble(false), 650);
 
-    // Playful cork pop if closed
+    // Upward explosive jolt
+    ballsRef.current.forEach((b) => {
+      b.vy -= Math.random() * 4.2 + 3.2;
+      b.vx += (Math.random() - 0.5) * 4.0;
+      b.omega += (Math.random() - 0.5) * 24;
+    });
+
+    // Cork gives a playful pop & snaps back
     if (corkState === "closed") {
       setCorkState("popped");
       setTimeout(() => {
         setCorkState("closing");
-        setTimeout(() => setCorkState("closed"), 350);
+        setTimeout(() => setCorkState("closed"), 500);
       }, 500);
     }
 
-    if (bounceTimer.current) window.clearTimeout(bounceTimer.current);
-    bounceTimer.current = window.setTimeout(() => {
-      setIsBouncing(false);
-      setJarWobble(false);
-    }, 720);
+    wakeUp();
   };
 
   return (
@@ -317,68 +643,56 @@ export function KalamiPage({ data }: { data: AppData }) {
         {/* 2. Glass back wall (unified seamless shape) */}
         <path d={JAR_OUTLINE} fill="url(#glass-back-grad)" />
 
-        {/* 3. Karami Jellies (Option B Responsive Tilt & Ceremony Drop / Tap Bounce) */}
-        <g
-          clipPath="url(#jar-inside)"
-          style={{
-            transform: `translateX(${tiltX.toFixed(1)}px)`,
-            transition: "transform 0.25s cubic-bezier(0.2, 0.8, 0.25, 1)",
-          }}
-        >
+        {/* 3. Karami Jellies (Option B Dynamic 2D Physics Rigidbody Stack) */}
+        <g clipPath="url(#jar-inside)">
           {Array.from({ length: inJar }, (_, i) => {
             const initial = restingSlot(i);
-            const isNew = hasNew && i >= newStartIndex;
-            const delay = (i - newStartIndex) * 110;
             const gradId = `jelly-grad-${initial.color.name}`;
             return (
               <g
                 key={i}
+                ref={(el) => {
+                  blobGroupRefs.current[i] = el;
+                }}
                 transform={`translate(${initial.x.toFixed(1)} ${initial.y.toFixed(1)}) rotate(${initial.turn.toFixed(1)})`}
+                style={{
+                  opacity: hasNew && i >= newStartIndex ? 0 : 1,
+                  willChange: "transform",
+                }}
               >
-                <g
-                  className={`jelly ${isNew ? "drop" : ""} ${isBouncing ? "tap-bounce" : ""}`}
-                  style={{
-                    animationDelay: isBouncing
-                      ? `${((i % 7) * 35 + Math.floor(i / 7) * 18)}ms`
-                      : isNew
-                      ? `${delay}ms`
-                      : undefined,
-                  }}
-                >
-                  {/* Soft bottom shadow under jelly */}
-                  <ellipse cx="0" cy="8.5" rx="8" ry="1.8" fill={initial.color.deep} opacity="0.25" />
+                {/* Soft bottom shadow under jelly */}
+                <ellipse cx="0" cy="8.5" rx="8" ry="1.8" fill={initial.color.deep} opacity="0.25" />
 
-                  {/* Jelly plump body with delicate fine graphite outline */}
-                  <path
-                    d="M -12, 1 C -12, -7, -7, -10.5, 0, -10.5 C 7, -10.5, 12, -7, 12, 1 C 12, 6.5, 8, 9.5, 0, 9.5 C -8, 9.5, -12, 6.5, -12, 1 Z"
-                    fill={`url(#${gradId})`}
-                    stroke="#5e5f5f"
-                    strokeWidth="0.85"
-                    strokeLinejoin="round"
-                  />
+                {/* Jelly plump body with delicate fine graphite outline */}
+                <path
+                  d="M -11, 1 C -11, -6.5, -6.5, -10, 0, -10 C 6.5, -10, 11, -6.5, 11, 1 C 11, 6, 7.5, 9, 0, 9 C -7.5, 9, -11, 6, -11, 1 Z"
+                  fill={`url(#${gradId})`}
+                  stroke="#5e5f5f"
+                  strokeWidth="0.85"
+                  strokeLinejoin="round"
+                />
 
-                  {/* Translucent glossy highlight crescent on top-left crest */}
-                  <path
-                    d="M -8, -2.5 C -8, -6.5 -4.5, -8.5 -0.5, -8.5 C 0.5, -8.5 0.8, -7.5 -0.2, -7.5 C -3.5, -7.5 -6.2, -5.2 -6.5, -2 C -6.7, -1.2 -8, -1.5 -8, -2.5 Z"
-                    fill="#ffffff"
-                    opacity="0.75"
-                  />
-                  <circle cx="2.2" cy="-6" r="0.65" fill="#ffffff" opacity="0.75" />
+                {/* Translucent glossy highlight crescent on top-left crest */}
+                <path
+                  d="M -7.5, -2.5 C -7.5, -6 -4, -8 -0.5, -8 C 0.5, -8 0.8, -7 -0.2, -7 C -3.2, -7 -5.8, -4.8 -6, -2 C -6.2, -1.2 -7.5, -1.5 -7.5, -2.5 Z"
+                  fill="#ffffff"
+                  opacity="0.75"
+                />
+                <circle cx="2" cy="-5.5" r="0.6" fill="#ffffff" opacity="0.75" />
 
-                  {/* Two dark graphite eyes */}
-                  <circle cx="-4.2" cy="-1" r="0.85" fill="#5e5f5f" />
-                  <circle cx="4.2" cy="-1.4" r="0.85" fill="#5e5f5f" />
+                {/* Two dark graphite eyes */}
+                <circle cx="-3.8" cy="-1" r="0.85" fill="#5e5f5f" />
+                <circle cx="3.8" cy="-1.4" r="0.85" fill="#5e5f5f" />
 
-                  {/* Inverted triangular beak with fine outline & tinted body tone */}
-                  <path
-                    d="M -2.2, 1.1 L 2.2, 0.7 L 0, 3.8 Z"
-                    fill={initial.color.beak}
-                    stroke="#5e5f5f"
-                    strokeWidth="0.65"
-                    strokeLinejoin="round"
-                    strokeLinecap="round"
-                  />
-                </g>
+                {/* Inverted triangular beak with fine outline & tinted body tone */}
+                <path
+                  d="M -2, 1 L 2, 0.7 L 0, 3.5 Z"
+                  fill={initial.color.beak}
+                  stroke="#5e5f5f"
+                  strokeWidth="0.65"
+                  strokeLinejoin="round"
+                  strokeLinecap="round"
+                />
               </g>
             );
           })}
