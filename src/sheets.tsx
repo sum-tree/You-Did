@@ -27,7 +27,7 @@ import {
   upgradeData,
   weekStart,
 } from "./domain.ts";
-import type { AppData, CalendarEvent, InterviewStep, Task } from "./domain.ts";
+import type { AppData, CalendarEvent, Completion, InterviewStep, Task } from "./domain.ts";
 import type { Snapshot } from "./storage.ts";
 import type { Update } from "./useAppStore.ts";
 import {
@@ -317,12 +317,16 @@ export function DaySheet({
   close,
   date,
   events,
+  tasks = [],
+  completions = [],
   base,
   onEdit,
   rebase,
 }: SheetProps & {
   date: string;
   events: CalendarEvent[];
+  tasks?: Task[];
+  completions?: Completion[];
   base: Snapshot;
   onEdit: (event: CalendarEvent, base: Snapshot) => void;
   rebase: (snapshot: Snapshot) => void;
@@ -330,9 +334,14 @@ export function DaySheet({
   const dayEvents = events
     .filter((event) => event.date === date)
     .sort((a, b) => a.time.localeCompare(b.time));
+
+  const relevantTasks = tasks.filter((t) => t.dueDate === date);
+  const relevantComps = completions.filter((c) => c.date === date);
+  const hasContent = dayEvents.length > 0 || relevantTasks.length > 0 || relevantComps.length > 0;
+
   return (
     <Modal {...sync} title={longDate(date, true)} close={close}>
-      {dayEvents.length ? (
+      {hasContent ? (
         <div className="event-stack">
           {dayEvents.map((event) => (
             <article className={`event-card ${event.kind}`} key={event.id}>
@@ -385,9 +394,31 @@ export function DaySheet({
               </span>
             </article>
           ))}
+          {relevantTasks.map((task) => (
+            <article className={`event-card ${task.category}`} key={task.id}>
+              <span className="event-icon">
+                <Clock3 size={19} />
+              </span>
+              <span>
+                <small>截止待办 · {CATEGORY[task.category]?.name || "任务"}</small>
+                <strong>{task.title}</strong>
+              </span>
+            </article>
+          ))}
+          {relevantComps.map((comp) => (
+            <article className={`event-card ${comp.category}`} key={`${comp.taskId}-${comp.date}`}>
+              <span className="event-icon">
+                <Check size={19} />
+              </span>
+              <span>
+                <small>当日完成 · {CATEGORY[comp.category]?.name || "任务"}</small>
+                <strong>{comp.title}</strong>
+              </span>
+            </article>
+          ))}
         </div>
       ) : (
-        <p className="empty-line">这一天没有事项。</p>
+        <p className="empty-line">这一天没有事项与任务。</p>
       )}
     </Modal>
   );

@@ -310,6 +310,7 @@ export function KalamiPage({ data }: { data: AppData }) {
     const seen = readSeen();
     return seen === null || seen >= total ? total : seen;
   });
+  const [replaySeed, setReplaySeed] = useState(0);
 
   const hasNew = jarStart + inJar > dropFrom && dropFrom < total;
   const newStartIndex = Math.max(0, dropFrom - jarStart);
@@ -327,7 +328,7 @@ export function KalamiPage({ data }: { data: AppData }) {
 
   // Gravity vectors (dynamic from phone gyro tilt, reduced for floaty relaxed fall)
   const tiltGx = useRef(0);
-  const tiltGy = useRef(0.126);
+  const tiltGy = useRef(0.113);
   const lastWakeTime = useRef(0);
 
   const wakeUp = () => {
@@ -362,7 +363,7 @@ export function KalamiPage({ data }: { data: AppData }) {
         b.vx += gx;
         b.vy += gy;
         // Cap max downward falling velocity so drops remain floaty, soft and visible
-        if (b.vy > 2.16) b.vy = 2.16;
+        if (b.vy > 1.94) b.vy = 1.94;
         b.vx *= 0.982;
         b.vy *= 0.982;
         b.omega *= 0.94;
@@ -617,7 +618,7 @@ export function KalamiPage({ data }: { data: AppData }) {
           x: 130 + (((hash >>> 3) % 9) - 4) * 1.5,
           y: 30,
           vx: (((hash >>> 7) % 7) - 3) * 0.25,
-          vy: 0.40,
+          vy: 0.36,
           rot: (((hash >>> 11) % 25) - 12) * 2,
           omega: (((hash >>> 15) % 11) - 5) * 1.2,
           deform: 0.10,
@@ -680,7 +681,7 @@ export function KalamiPage({ data }: { data: AppData }) {
         writeSeen(total);
       }
     };
-  }, [inJar, total, dropFrom, jarStart, hasNew, newStartIndex]);
+  }, [inJar, total, dropFrom, jarStart, hasNew, newStartIndex, replaySeed]);
 
   // Mobile Device Orientation (Gyro tilt response) & Motion Shake
   useEffect(() => {
@@ -693,7 +694,7 @@ export function KalamiPage({ data }: { data: AppData }) {
           lastGamma = gamma;
           const rad = (gamma * Math.PI) / 180;
           tiltGx.current = Math.sin(rad) * 0.144;
-          tiltGy.current = Math.cos(rad) * 0.144;
+          tiltGy.current = Math.cos(rad) * 0.130;
           wakeUp();
         }
       }
@@ -751,6 +752,22 @@ export function KalamiPage({ data }: { data: AppData }) {
     }
 
     wakeUp();
+  };
+
+  const handleReplay = () => {
+    if (hasNew || corkState !== "closed") return;
+    const lastReward = data.rewards[data.rewards.length - 1];
+    const lastBatchCount = lastReward
+      ? Math.max(1, Math.min(inJar, lastReward.amount))
+      : Math.min(inJar, 1);
+    const replayFrom = Math.max(jarStart, total - lastBatchCount);
+
+    // Keep existing balls up to replayFrom - jarStart, recreate only the last batch
+    const keepCount = Math.max(0, replayFrom - jarStart);
+    ballsRef.current = ballsRef.current.slice(0, keepCount);
+
+    setDropFrom(replayFrom);
+    setReplaySeed((s) => s + 1);
   };
 
   return (
@@ -1009,10 +1026,9 @@ export function KalamiPage({ data }: { data: AppData }) {
             <button
               type="button"
               className="kalami-replay-btn"
-              onClick={() => {
-                ballsRef.current = [];
-                setDropFrom(jarStart);
-              }}
+              disabled={hasNew || corkState !== "closed"}
+              onClick={handleReplay}
+              title="重播最后一轮获得的卡拉米掉落动画"
             >
               重播掉落
             </button>
