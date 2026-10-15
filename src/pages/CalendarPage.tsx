@@ -146,9 +146,11 @@ export function CalendarPage({
         ).map((date) => {
           const items = itemsByDate.get(date) ?? [];
           const count = items.length;
-          const maxVisible = 6;
-          const displayItems = items.slice(0, maxVisible);
-          const moreCount = count - displayItems.length;
+          // Optimized for iPhone mobile viewport: 5 rows max per cell.
+          // If > 5 items, show first 4 items and display +N on the bottom-most row.
+          const hasOverflow = count > 5;
+          const displayItems = hasOverflow ? items.slice(0, 4) : items;
+          const moreCount = hasOverflow ? count - 4 : 0;
 
           return (
             <button
@@ -163,11 +165,8 @@ export function CalendarPage({
             >
               <div className="cal-day-header">
                 <span className="cal-day-num">{dateObject(date).getDate()}</span>
-                {moreCount > 0 && (
-                  <span className="cal-more-badge">+{moreCount}</span>
-                )}
               </div>
-              {displayItems.length > 0 && (
+              {count > 0 && (
                 <div className="cal-day-pills">
                   {displayItems.map((item) => (
                     <span
@@ -178,6 +177,11 @@ export function CalendarPage({
                       {item.title}
                     </span>
                   ))}
+                  {moreCount > 0 && (
+                    <span className="cal-task-pill cal-more-pill">
+                      +{moreCount}
+                    </span>
+                  )}
                 </div>
               )}
             </button>
