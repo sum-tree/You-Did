@@ -446,18 +446,6 @@ main {
   line-height: 1.8;
   padding-top: 10px;
 }
-.done-toggle {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  font-size: 9px;
-  color: #8e947e;
-  min-height: 34px;
-  cursor: pointer;
-}
-.done-toggle input {
-  accent-color: #8e9f72;
-}
 .calendar-card {
   background: #fffefa;
   border: 1px solid #e7e8db;
@@ -967,14 +955,10 @@ main {
   font-size: 11px;
   padding: 0 6px;
 }
-.table-tools .done-toggle {
-  white-space: nowrap;
-  font-size: 11px;
-}
 .todo-head,
 .todo-main {
   display: grid;
-  grid-template-columns: 26px minmax(0, 1fr) 22px 34px 40px;
+  grid-template-columns: minmax(0, 1fr) 22px 34px 40px;
   gap: 6px;
   align-items: center;
 }
@@ -991,20 +975,15 @@ main {
   padding: 8px 10px;
   min-height: 48px;
 }
-.todo-main .task-check {
-  margin-top: 0;
-}
 .todo-title {
+  display: flex;
+  align-items: center;
   min-height: 32px;
   padding: 0;
   text-align: left;
   font-size: 13px;
   line-height: 1.4;
   overflow-wrap: anywhere;
-}
-.todo-row.is-done .todo-title {
-  text-decoration: line-through;
-  color: #979b8d;
 }
 .todo-main .tag {
   justify-self: start;
@@ -1027,7 +1006,7 @@ main {
   flex-wrap: wrap;
   align-items: center;
   gap: 4px 12px;
-  padding: 0 10px 10px 42px;
+  padding: 0 10px 10px;
   font-size: 11px;
   color: #858b78;
 }

@@ -10,6 +10,8 @@ import {
   dailyView,
   emptyData,
   ensureWeek,
+  generatedSeries,
+  SERIES_NAME,
   inferContribution,
   interviewRewardInfo,
   localDate,
@@ -720,4 +722,12 @@ test("interview cards can show the current reward and when it next drops", () =>
   assert.deepEqual(interviewRewardInfo(iv, "2026-10-16"), { now: 4, next: 2, inDays: 3 });
   assert.deepEqual(interviewRewardInfo(iv, "2026-10-22"), { now: 2, next: 1, inDays: 1 });
   assert.deepEqual(interviewRewardInfo(iv, "2026-10-23"), { now: 1 });
+});
+test("generated tasks report their series and todo display name", () => {
+  const data = ensureWeek(emptyData(), day);
+  const names = data.tasks.map((t) => [generatedSeries(t), SERIES_NAME[generatedSeries(t)]]);
+  assert.deepEqual(names[0], ["resume", "香港秋招简历投递"]);
+  assert.deepEqual(names[3], ["english", "英语口语练习"]);
+  assert.deepEqual(names[6], ["cantonese", "粤语口语练习"]);
+  assert.equal(generatedSeries(task("mine", "resume", 5)), undefined);
 });

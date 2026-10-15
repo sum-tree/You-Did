@@ -230,7 +230,6 @@ export default function App() {
             today={today}
             view={poolView}
             setView={setPoolView}
-            onFinish={finish}
             onMenu={(task) => setTaskMenu(task)}
             onBack={() => changePage("daily")}
           />

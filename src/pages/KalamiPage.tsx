@@ -56,7 +56,7 @@ function Blob({ index, drop, delay }: { index: number; drop: boolean; delay: num
         style={drop ? { animationDelay: `${delay}ms` } : undefined}
       >
         <path
-          d="M-11,5 C-12,-5 -6,-10 0,-10 C6,-10 12,-5 11,5 C10,9 -10,9 -11,5Z"
+          d="M-11,2.5 C-11,-6 -6,-10 0,-10 C6,-10 11,-6 11,2.5 C11,6.5 8,8.5 0,8.5 C-8,8.5 -11,6.5 -11,2.5Z"
           fill={`url(#${gradient})`}
           stroke={color.edge}
           strokeWidth="1.2"

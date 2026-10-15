@@ -499,6 +499,14 @@ function seriesOf(id: string): Series | undefined {
   )?.[1] as Series | undefined;
 }
 export const isGenerated = (task: Task) => seriesOf(task.id) !== undefined;
+export const generatedSeries = (task: Task) => seriesOf(task.id);
+// The todo list shows each weekly series as one calm row without quantities;
+// daily cards keep the task titles with their amounts.
+export const SERIES_NAME: Record<Series, string> = {
+  resume: "香港秋招简历投递",
+  cantonese: "粤语口语练习",
+  english: "英语口语练习",
+};
 // Runs once per week: archives earlier generated tasks still open (the Sunday-midnight
 // clear), then creates this week's set. IDs and timestamps are deterministic so
 // concurrent tabs write identical records. Restored or archived ones are left alone.
