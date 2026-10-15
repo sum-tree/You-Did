@@ -337,6 +337,25 @@ export function KalamiPage({ data }: { data: AppData }) {
   const isSimulatingRef = useRef(false);
   const corkHandledRef = useRef(false);
   const ceremonyDeadlineRef = useRef(0);
+  const hasNewRef = useRef(hasNew);
+  const newStartIndexRef = useRef(newStartIndex);
+  const totalRef = useRef(total);
+  hasNewRef.current = hasNew;
+  newStartIndexRef.current = newStartIndex;
+  totalRef.current = total;
+
+  const closeCorkCeremony = () => {
+    if (corkHandledRef.current) return;
+    corkHandledRef.current = true;
+    setCorkState("closing");
+    setTimeout(() => {
+      setCorkState("closed");
+      setJarThump(true);
+      setTimeout(() => setJarThump(false), 350);
+      writeSeen(totalRef.current);
+      setDropFrom(totalRef.current);
+    }, 650);
+  };
 
   // Gravity vectors (dynamic from phone gyro tilt, reduced for floaty relaxed fall)
   const tiltGx = useRef(0);
@@ -547,49 +566,33 @@ export function KalamiPage({ data }: { data: AppData }) {
       });
 
       // 5. Ceremony & Cork Closure check
+      const currentHasNew = hasNewRef.current;
+      const currentStartIndex = newStartIndexRef.current;
       const allActive = balls.every((b) => b.active);
-      const newBalls = hasNew ? balls.slice(newStartIndex) : [];
-      // Newly dropped balls must have descended past the neck/shoulder into jar body (y > 98) and settled
-      const newBallsLanded =
-        newBalls.length > 0 &&
-        newBalls.every(
-          (b) => b.active && b.y > 98 && Math.hypot(b.vx, b.vy) < 0.45
-        );
-      // Overall jar motion average
-      const avgMotion =
-        balls.length > 0
-          ? balls.reduce(
-              (sum, b) => sum + (b.active ? Math.hypot(b.vx, b.vy) : 0),
-              0
-            ) / balls.length
-          : 0;
-      const isCalm = hasNew
-        ? allActive && newBallsLanded && avgMotion < 0.32
-        : allActive && avgMotion < 0.15;
+      const newBalls = currentHasNew ? balls.slice(currentStartIndex) : [];
 
-      if (isCalm) {
+      // Newly dropped balls must have descended past the neck entrance (y > 58) into the jar
+      const newBallsInJar =
+        newBalls.length > 0 &&
+        newBalls.every((b) => b.active && b.y > 58);
+      // New balls have largely settled (low impact speed)
+      const newBallsCalm =
+        newBallsInJar &&
+        newBalls.every((b) => Math.hypot(b.vx, b.vy) < 0.65);
+
+      if (newBallsCalm) {
         calmFrames++;
       } else {
         calmFrames = Math.max(0, calmFrames - 1);
       }
 
       // Reliable cork closure when all new balls are in and settled, or on deadline
-      if (hasNew && !corkHandledRef.current && allActive) {
+      if (currentHasNew && !corkHandledRef.current && allActive) {
         const canClose =
-          (calmFrames >= 12 && newBallsLanded) ||
-          (now >= ceremonyDeadlineRef.current &&
-            newBalls.every((b) => b.active && b.y > 98)) ||
-          now >= ceremonyDeadlineRef.current + 2500;
+          (calmFrames >= 8 && newBallsInJar) ||
+          now >= ceremonyDeadlineRef.current;
         if (canClose) {
-          corkHandledRef.current = true;
-          setCorkState("closing");
-          setTimeout(() => {
-            setCorkState("closed");
-            setJarThump(true);
-            setTimeout(() => setJarThump(false), 350);
-            writeSeen(total);
-            setDropFrom(total);
-          }, 650);
+          closeCorkCeremony();
         }
       }
 
@@ -701,7 +704,15 @@ export function KalamiPage({ data }: { data: AppData }) {
     if (hasNew) {
       corkHandledRef.current = false;
       const newCount = Math.max(1, inJar - newStartIndex);
-      ceremonyDeadlineRef.current = now + 1200 + newCount * 600 + 3500;
+      // Deadline: 1200ms initial pop + stagger entry delay + 2200ms settling
+      ceremonyDeadlineRef.current = now + 1200 + newCount * 600 + 2200;
+
+      // Reset any previous physics frame so new drop starts clean
+      if (rafId.current) {
+        cancelAnimationFrame(rafId.current);
+        rafId.current = null;
+      }
+      isSimulatingRef.current = false;
 
       // Ensure cork begins closed and smoothly pops open after mounting paint
       setCorkState("closed");
@@ -709,14 +720,20 @@ export function KalamiPage({ data }: { data: AppData }) {
         setCorkState("popped");
       }, 120);
 
+      // Independent safety fallback: cork is guaranteed to close even under continuous gyro shaking
+      const safetyCloseTimer = window.setTimeout(() => {
+        closeCorkCeremony();
+      }, 1200 + newCount * 600 + 3200);
+
       wakeUp();
 
       return () => {
         clearTimeout(openTimer);
+        clearTimeout(safetyCloseTimer);
         if (rafId.current) cancelAnimationFrame(rafId.current);
         isSimulatingRef.current = false;
-        if (hasNew) {
-          writeSeen(total);
+        if (hasNewRef.current) {
+          writeSeen(totalRef.current);
         }
       };
     } else {
@@ -728,8 +745,8 @@ export function KalamiPage({ data }: { data: AppData }) {
     return () => {
       if (rafId.current) cancelAnimationFrame(rafId.current);
       isSimulatingRef.current = false;
-      if (hasNew) {
-        writeSeen(total);
+      if (hasNewRef.current) {
+        writeSeen(totalRef.current);
       }
     };
   }, [inJar, total, dropFrom, jarStart, hasNew, newStartIndex, replaySeed]);
@@ -871,6 +888,14 @@ export function KalamiPage({ data }: { data: AppData }) {
     // Keep existing balls up to replayFrom - jarStart, recreate only the last batch
     const keepCount = Math.max(0, replayFrom - jarStart);
     ballsRef.current = ballsRef.current.slice(0, keepCount);
+
+    // Reset simulation & cork flag so replay drop starts fresh
+    if (rafId.current) {
+      cancelAnimationFrame(rafId.current);
+      rafId.current = null;
+    }
+    isSimulatingRef.current = false;
+    corkHandledRef.current = false;
 
     setDropFrom(replayFrom);
     setReplaySeed((s) => s + 1);
