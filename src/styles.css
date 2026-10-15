@@ -1257,9 +1257,9 @@ main {
   border: 1.5px solid #a3c7cf;
   background: linear-gradient(
     to top,
-    #fa6d66 0 33%,
-    #8ee26f 33% 66%,
-    #d0e5fb 66% 85%,
+    #f79389 0 33%,
+    #a1e590 33% 66%,
+    #dee9f6 66% 85%,
     transparent 85%
   );
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);

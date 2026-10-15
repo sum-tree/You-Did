@@ -10,24 +10,24 @@ const SEEN_KEY = "you-did:jar-seen";
 const COLORS = [
   {
     name: "red",
-    light: "#ffa39c",
-    base: "#fa6d66",
-    deep: "#e2544c",
-    beak: "#cf4138",
+    light: "#fce5e2",
+    base: "#f79389",
+    deep: "#e87b70",
+    beak: "#a6746f",
   },
   {
     name: "green",
-    light: "#bbf5a0",
-    base: "#8ee26f",
-    deep: "#6ac747",
-    beak: "#509a2e",
+    light: "#eaf8e6",
+    base: "#a1e590",
+    deep: "#88d675",
+    beak: "#7da773",
   },
   {
     name: "blue",
-    light: "#eef6ff",
-    base: "#d0e5fb",
-    deep: "#9fc6f0",
-    beak: "#7eaad9",
+    light: "#f6f9fc",
+    base: "#dee9f6",
+    deep: "#c3d6eb",
+    beak: "#a9bed5",
   },
 ];
 
@@ -123,14 +123,14 @@ function Blob({
         }
       >
         {/* Soft bottom shadow under the jelly */}
-        <ellipse cx="0" cy="8.5" rx="8.5" ry="2.2" fill={color.deep} opacity="0.4" />
+        <ellipse cx="0" cy="8.5" rx="8" ry="1.8" fill={color.deep} opacity="0.25" />
 
-        {/* Jelly plump body with dark graphite outline (matches reference) */}
+        {/* Jelly plump body with delicate fine graphite outline matching reference */}
         <path
           d="M -12, 1 C -12, -7, -7, -10.5, 0, -10.5 C 7, -10.5, 12, -7, 12, 1 C 12, 6.5, 8, 9.5, 0, 9.5 C -8, 9.5, -12, 6.5, -12, 1 Z"
           fill={`url(#${gradId})`}
-          stroke="#444246"
-          strokeWidth="1.6"
+          stroke="#5e5f5f"
+          strokeWidth="0.85"
           strokeLinejoin="round"
         />
 
@@ -138,21 +138,21 @@ function Blob({
         <path
           d="M -8, -2.5 C -8, -6.5 -4.5, -8.5 -0.5, -8.5 C 0.5, -8.5 0.8, -7.5 -0.2, -7.5 C -3.5, -7.5 -6.2, -5.2 -6.5, -2 C -6.7, -1.2 -8, -1.5 -8, -2.5 Z"
           fill="#ffffff"
-          opacity="0.85"
+          opacity="0.75"
         />
         {/* Secondary micro gloss dot */}
-        <circle cx="2.2" cy="-6" r="0.75" fill="#ffffff" opacity="0.85" />
+        <circle cx="2.2" cy="-6" r="0.65" fill="#ffffff" opacity="0.75" />
 
-        {/* Two dark graphite eyes (slightly organic placement) */}
-        <circle cx="-4.2" cy="-1" r="1.1" fill="#444246" />
-        <circle cx="4.2" cy="-1.4" r="1.1" fill="#444246" />
+        {/* Two dark graphite eyes (delicate size matching reference) */}
+        <circle cx="-4.2" cy="-1" r="0.85" fill="#5e5f5f" />
+        <circle cx="4.2" cy="-1.4" r="0.85" fill="#5e5f5f" />
 
-        {/* Downward-pointing triangular beak with outline & darker tinted body color */}
+        {/* Downward-pointing triangular beak with fine outline & tinted body tone */}
         <path
           d="M -2.2, 1.1 L 2.2, 0.7 L 0, 3.8 Z"
           fill={color.beak}
-          stroke="#444246"
-          strokeWidth="1.1"
+          stroke="#5e5f5f"
+          strokeWidth="0.65"
           strokeLinejoin="round"
           strokeLinecap="round"
         />

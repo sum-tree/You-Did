@@ -88,22 +88,22 @@ export function KalamiIcon({
   const id = useId();
   const colors = {
     red: {
-      light: "#ffa39c",
-      base: "#fa6d66",
-      deep: "#e2544c",
-      beak: "#cf4138",
+      light: "#fce5e2",
+      base: "#f79389",
+      deep: "#e87b70",
+      beak: "#a6746f",
     },
     green: {
-      light: "#bbf5a0",
-      base: "#8ee26f",
-      deep: "#6ac747",
-      beak: "#509a2e",
+      light: "#eaf8e6",
+      base: "#a1e590",
+      deep: "#88d675",
+      beak: "#7da773",
     },
     blue: {
-      light: "#eef6ff",
-      base: "#d0e5fb",
-      deep: "#9fc6f0",
-      beak: "#7eaad9",
+      light: "#f6f9fc",
+      base: "#dee9f6",
+      deep: "#c3d6eb",
+      beak: "#a9bed5",
     },
   }[variant];
 
@@ -129,27 +129,27 @@ export function KalamiIcon({
           <stop offset="100%" stopColor={colors.deep} />
         </radialGradient>
       </defs>
-      <ellipse cx="10" cy="17.2" rx="6.5" ry="1.6" fill={colors.deep} opacity="0.35" />
+      <ellipse cx="10" cy="17.2" rx="6.5" ry="1.6" fill={colors.deep} opacity="0.25" />
       <path
         d="M 2.5, 11 C 2.5, 5.2, 5.8, 2.5, 10, 2.5 C 14.2, 2.5, 17.5, 5.2, 17.5, 11 C 17.5, 15.5, 14.5, 18.2, 10, 18.2 C 5.5, 18.2, 2.5, 15.5, 2.5, 11 Z"
         fill={`url(#kalami-icon-grad-${id})`}
-        stroke="#444246"
-        strokeWidth="1.3"
+        stroke="#5e5f5f"
+        strokeWidth="0.8"
         strokeLinejoin="round"
       />
       <path
         d="M 5, 8.5 C 5, 5.6 7.2, 4.2 9.8, 4.2 C 10.4, 4.2 10.5, 4.8 9.9, 4.9 C 7.8, 5.3 6.3, 6.8 6.1, 8.9 C 6, 9.5 5, 9.3 5, 8.5 Z"
         fill="#ffffff"
-        opacity="0.88"
+        opacity="0.8"
       />
-      <circle cx="11.8" cy="5.4" r="0.65" fill="#ffffff" opacity="0.85" />
-      <circle cx="7" cy="9.8" r="0.9" fill="#444246" />
-      <circle cx="13" cy="9.5" r="0.9" fill="#444246" />
+      <circle cx="11.8" cy="5.4" r="0.6" fill="#ffffff" opacity="0.8" />
+      <circle cx="7" cy="9.8" r="0.75" fill="#5e5f5f" />
+      <circle cx="13" cy="9.5" r="0.75" fill="#5e5f5f" />
       <path
         d="M 8.6, 11.2 L 11.4, 10.9 L 10, 13 Z"
         fill={colors.beak}
-        stroke="#444246"
-        strokeWidth="0.8"
+        stroke="#5e5f5f"
+        strokeWidth="0.6"
         strokeLinejoin="round"
         strokeLinecap="round"
       />
