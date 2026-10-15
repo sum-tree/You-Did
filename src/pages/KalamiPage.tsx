@@ -146,11 +146,12 @@ function constrainJarPhysics(p: BallPhysics) {
       const impactSpeed = p.vy;
       if (p.vy < 0.35) {
         p.vy = 0;
+        p.vx *= 0.94; // Smooth rolling contact friction
       } else {
         p.vy = -p.vy * e;
+        p.vx *= 0.78; // Impact damping
       }
-      p.vx *= 0.72;
-      p.omega *= 0.82;
+      p.omega *= 0.88;
       if (Math.abs(p.vx) > 0.08) {
         p.omega += (p.vx / R) * 1.5;
       }
@@ -411,7 +412,8 @@ export function KalamiPage({ data }: { data: AppData }) {
           b.omega *= 0.82;
           if (Math.abs(b.omega) < 0.05) b.omega = 0;
         }
-        if (speed < 0.04 && Math.abs(gx) < 0.05) {
+        // Only bring to complete rest when tilt force is negligible and velocity is near zero
+        if (speed < 0.02 && Math.abs(gx) < 0.015) {
           b.vx = 0;
           b.vy = 0;
         }
@@ -732,18 +734,66 @@ export function KalamiPage({ data }: { data: AppData }) {
     };
   }, [inJar, total, dropFrom, jarStart, hasNew, newStartIndex, replaySeed]);
 
+  // iOS DeviceOrientation permission handling
+  const [gyroPermState, setGyroPermState] = useState<"idle" | "granted" | "denied">(() => {
+    if (typeof window === "undefined") return "idle";
+    const DOE = window.DeviceOrientationEvent as unknown as {
+      requestPermission?: () => Promise<string>;
+    };
+    return typeof DOE?.requestPermission === "function" ? "idle" : "granted";
+  });
+
+  const requestGyroPermission = async () => {
+    const DOE = window.DeviceOrientationEvent as unknown as {
+      requestPermission?: () => Promise<"granted" | "denied">;
+    };
+    if (typeof DOE?.requestPermission === "function") {
+      try {
+        const res = await DOE.requestPermission();
+        if (res === "granted") {
+          setGyroPermState("granted");
+          wakeUp();
+        } else {
+          setGyroPermState("denied");
+        }
+      } catch (err) {
+        console.warn("Device orientation permission error", err);
+        setGyroPermState("denied");
+      }
+    } else {
+      setGyroPermState("granted");
+      wakeUp();
+    }
+  };
+
   // Mobile Device Orientation (Gyro tilt response) & Motion Shake
   useEffect(() => {
+    if (gyroPermState === "denied") return;
+
     let lastGamma = 0;
     const handleOrientation = (e: DeviceOrientationEvent) => {
       if (e.gamma !== null) {
-        // Left-right tilt angle (-45 to +45 deg)
-        const gamma = Math.max(-45, Math.min(45, e.gamma));
-        if (Math.abs(gamma - lastGamma) > 1.2) {
+        // Left-right tilt angle (-50 to +50 deg)
+        const gamma = Math.max(-50, Math.min(50, e.gamma));
+        const delta = Math.abs(gamma - lastGamma);
+        const isTilted = Math.abs(gamma) > 2.5;
+
+        if (delta > 0.8 || (isTilted && Date.now() - lastWakeTime.current > 300)) {
+          // If starting to tilt from resting posture, give a tiny agitation to break hexagonal interlocking
+          if (Math.abs(lastGamma) < 2.0 && isTilted) {
+            ballsRef.current.forEach((b) => {
+              if (b.active && Math.hypot(b.vx, b.vy) < 0.08) {
+                b.vy -= Math.random() * 0.22 + 0.08;
+                b.vx += (gamma > 0 ? 0.12 : -0.12) * Math.random();
+              }
+            });
+          }
+
           lastGamma = gamma;
           const rad = (gamma * Math.PI) / 180;
-          tiltGx.current = Math.sin(rad) * 0.144;
-          tiltGy.current = Math.cos(rad) * 0.130;
+          // Responsive horizontal gravity vector with adaptive base vertical gravity
+          tiltGx.current = Math.sin(rad) * 0.32;
+          tiltGy.current = Math.max(0.08, Math.cos(rad) * 0.130);
           wakeUp();
         }
       }
@@ -775,10 +825,14 @@ export function KalamiPage({ data }: { data: AppData }) {
       window.removeEventListener("deviceorientation", handleOrientation);
       window.removeEventListener("devicemotion", handleMotion);
     };
-  }, []);
+  }, [gyroPermState]);
 
   // Tap / Click Interaction: Jumble & bounce the jellies
   const handleJarTap = () => {
+    // If on iOS and gyro permission has not been requested yet, request it on this user gesture!
+    if (gyroPermState === "idle") {
+      void requestGyroPermission();
+    }
     if (jarWobble || hasNew || corkState !== "closed") return;
     setJarWobble(true);
     setTimeout(() => setJarWobble(false), 650);
@@ -1075,6 +1129,19 @@ export function KalamiPage({ data }: { data: AppData }) {
       ) : (
         <p className="kalami-hint">
           点击玻璃罐可以颠球，倾斜手机可滚动它们哦～
+          {gyroPermState === "idle" && (
+            <button
+              type="button"
+              className="kalami-gyro-btn"
+              onClick={requestGyroPermission}
+              title="授权手机陀螺仪感应，体验倾斜滚动"
+            >
+              📱 启用重力感应
+            </button>
+          )}
+          {gyroPermState === "denied" && (
+            <span className="kalami-gyro-denied">⚠️ 陀螺仪未授权（可刷新并在弹窗中允许）</span>
+          )}
           {inJar > 0 && (
             <button
               type="button"

@@ -1525,6 +1525,31 @@ main {
   color: #8b997c;
   user-select: none;
 }
+.kalami-gyro-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  margin-left: 6px;
+  padding: 2px 8px;
+  font-size: 11px;
+  font-weight: 500;
+  color: #2e6b5e;
+  background: #e7f5f0;
+  border: 1px solid #bce4d8;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+.kalami-gyro-btn:hover {
+  background: #d5eee6;
+  border-color: #9cd6c4;
+}
+.kalami-gyro-denied {
+  display: inline-block;
+  margin-left: 6px;
+  font-size: 11px;
+  color: #c04c40;
+}
 .kalami-page .section-title {
   align-self: stretch;
   margin-top: 18px;
