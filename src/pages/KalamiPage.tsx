@@ -116,6 +116,8 @@ interface BallPhysics {
   deform: number;      // Squash (<0) / Stretch (>0) deformation amplitude
   vDeform: number;     // Elastic spring deformation velocity
   deformAngle: number; // Deformation axis in world degrees (e.g. 90 = vertical squash)
+  maxImpact: number;   // Single strongest collision in current frame
+  impactAngle: number; // Direction of strongest collision in current frame
   color: (typeof COLORS)[number];
   active: boolean;
   spawnTime: number;
@@ -139,9 +141,9 @@ function constrainJarPhysics(p: BallPhysics) {
         p.omega += (p.vx / R) * 1.5;
       }
       // Juicy vertical squash upon hitting floor (squash vertically, expand horizontally)
-      if (impactSpeed > 0.35) {
-        const impact = Math.min(1.0, impactSpeed / 4.2);
-        p.vDeform -= impact * 0.42;
+      if (impactSpeed > 0.45 && Math.abs(p.deform) < 0.18) {
+        const impact = Math.min(1.0, (impactSpeed - 0.35) / 3.8);
+        p.vDeform -= impact * 0.32;
         p.deformAngle = 90;
       }
     }
@@ -167,9 +169,9 @@ function constrainJarPhysics(p: BallPhysics) {
           if (Math.abs(vt) > 0.1) {
             p.omega += vt * 0.2;
           }
-          if (vn > 0.35) {
-            const impact = Math.min(1.0, vn / 4.2);
-            p.vDeform -= impact * 0.36;
+          if (vn > 0.45 && Math.abs(p.deform) < 0.18) {
+            const impact = Math.min(1.0, (vn - 0.35) / 3.8);
+            p.vDeform -= impact * 0.28;
             p.deformAngle = Math.atan2(ny, nx) * (180 / Math.PI);
           }
         }
@@ -192,9 +194,9 @@ function constrainJarPhysics(p: BallPhysics) {
           if (Math.abs(vt) > 0.1) {
             p.omega += vt * 0.2;
           }
-          if (vn > 0.35) {
-            const impact = Math.min(1.0, vn / 4.2);
-            p.vDeform -= impact * 0.36;
+          if (vn > 0.45 && Math.abs(p.deform) < 0.18) {
+            const impact = Math.min(1.0, (vn - 0.35) / 3.8);
+            p.vDeform -= impact * 0.28;
             p.deformAngle = Math.atan2(ny, nx) * (180 / Math.PI);
           }
         }
@@ -209,9 +211,9 @@ function constrainJarPhysics(p: BallPhysics) {
           if (Math.abs(p.vy) > 0.1) {
             p.omega -= (p.vy / R) * 1.5;
           }
-          if (impactSpeed > 0.35) {
-            const impact = Math.min(1.0, impactSpeed / 4.2);
-            p.vDeform -= impact * 0.36;
+          if (impactSpeed > 0.45 && Math.abs(p.deform) < 0.18) {
+            const impact = Math.min(1.0, (impactSpeed - 0.35) / 3.8);
+            p.vDeform -= impact * 0.28;
             p.deformAngle = 0; // Squashes horizontally, bulges vertically
           }
         }
@@ -225,9 +227,9 @@ function constrainJarPhysics(p: BallPhysics) {
           if (Math.abs(p.vy) > 0.1) {
             p.omega += (p.vy / R) * 1.5;
           }
-          if (impactSpeed > 0.35) {
-            const impact = Math.min(1.0, impactSpeed / 4.2);
-            p.vDeform -= impact * 0.36;
+          if (impactSpeed > 0.45 && Math.abs(p.deform) < 0.18) {
+            const impact = Math.min(1.0, (impactSpeed - 0.35) / 3.8);
+            p.vDeform -= impact * 0.28;
             p.deformAngle = 0;
           }
         }
@@ -242,10 +244,9 @@ function constrainJarPhysics(p: BallPhysics) {
       if (p.vx < 0) {
         const impactSpeed = -p.vx;
         p.vx = -p.vx * e;
-        p.vy *= 0.85;
         p.omega *= 0.85;
-        if (impactSpeed > 0.35) {
-          p.vDeform -= Math.min(1.0, impactSpeed / 4.2) * 0.34;
+        if (impactSpeed > 0.45 && Math.abs(p.deform) < 0.18) {
+          p.vDeform -= Math.min(1.0, (impactSpeed - 0.35) / 3.8) * 0.26;
           p.deformAngle = 32;
         }
       }
@@ -255,10 +256,9 @@ function constrainJarPhysics(p: BallPhysics) {
       if (p.vx > 0) {
         const impactSpeed = p.vx;
         p.vx = -p.vx * e;
-        p.vy *= 0.85;
         p.omega *= 0.85;
-        if (impactSpeed > 0.35) {
-          p.vDeform -= Math.min(1.0, impactSpeed / 4.2) * 0.34;
+        if (impactSpeed > 0.45 && Math.abs(p.deform) < 0.18) {
+          p.vDeform -= Math.min(1.0, (impactSpeed - 0.35) / 3.8) * 0.26;
           p.deformAngle = -32;
         }
       }
@@ -369,24 +369,24 @@ export function KalamiPage({ data }: { data: AppData }) {
 
         const speed = Math.hypot(b.vx, b.vy);
 
-        // Flight elongation: when falling fast, stretch along trajectory
-        if (speed > 1.2 && Math.abs(b.deform) < 0.1) {
+        // Flight elongation: when falling fast, gently pull stretch along trajectory
+        let targetDeform = 0;
+        if (speed > 1.4 && Math.abs(b.deform) < 0.12) {
           const flightAngle = Math.atan2(b.vy, b.vx) * (180 / Math.PI);
-          const flightStretch = Math.min(0.18, (speed - 1.2) * 0.032);
-          b.deform = flightStretch;
+          targetDeform = Math.min(0.12, (speed - 1.4) * 0.025);
           b.deformAngle = flightAngle;
         }
 
-        // Jelly harmonic damped spring: pulls deform back to 0 with juicy elasticity
-        const k = 0.22; // spring tension
-        const damping = 0.81; // jelly damping
-        b.vDeform += -k * b.deform;
+        // Jelly harmonic damped spring: pulls deform toward targetDeform with juicy elasticity
+        const k = 0.24; // spring tension
+        const damping = 0.78; // jelly damping
+        b.vDeform += -k * (b.deform - targetDeform);
         b.vDeform *= damping;
         b.deform += b.vDeform;
 
         // Bounded deformation for cartoon appeal
-        b.deform = Math.max(-0.38, Math.min(0.28, b.deform));
-        if (Math.abs(b.deform) < 0.005 && Math.abs(b.vDeform) < 0.005) {
+        b.deform = Math.max(-0.25, Math.min(0.20, b.deform));
+        if (speed < 0.2 && Math.abs(b.deform) < 0.015 && Math.abs(b.vDeform) * 10 < 0.1) {
           b.deform = 0;
           b.vDeform = 0;
         }
@@ -410,6 +410,11 @@ export function KalamiPage({ data }: { data: AppData }) {
       }
 
       // 3. Circle-to-Circle Collision (3 relaxation iterations with Coulomb friction and jelly squish)
+      balls.forEach((b) => {
+        b.maxImpact = 0;
+        b.impactAngle = 0;
+      });
+
       for (let pass = 0; pass < 3; pass++) {
         for (let i = 0; i < balls.length; i++) {
           const b1 = balls[i];
@@ -444,14 +449,18 @@ export function KalamiPage({ data }: { data: AppData }) {
                 b2.vx += nx * impulseN;
                 b2.vy += ny * impulseN;
 
-                // Jelly deformation upon mutual impact!
-                if (impactSpeed > 0.35) {
-                  const impact = Math.min(1.0, impactSpeed / 4.2);
+                // Track strongest impact for jelly deformation (evaluated once per frame to prevent twitching)
+                if (impactSpeed > 0.38) {
+                  const impact = Math.min(0.75, (impactSpeed - 0.3) / 3.6);
                   const colAngle = Math.atan2(ny, nx) * (180 / Math.PI);
-                  b1.vDeform -= impact * 0.32;
-                  b1.deformAngle = colAngle;
-                  b2.vDeform -= impact * 0.32;
-                  b2.deformAngle = colAngle;
+                  if (impact > b1.maxImpact) {
+                    b1.maxImpact = impact;
+                    b1.impactAngle = colAngle;
+                  }
+                  if (impact > b2.maxImpact) {
+                    b2.maxImpact = impact;
+                    b2.impactAngle = colAngle;
+                  }
                 }
 
                 // Tangential rolling friction with Coulomb clamp
@@ -476,6 +485,16 @@ export function KalamiPage({ data }: { data: AppData }) {
               }
             }
           }
+        }
+      }
+
+      // Apply single strongest jelly squash deformation once per frame
+      for (let i = 0; i < balls.length; i++) {
+        const b = balls[i];
+        if (!b.active) continue;
+        if (b.maxImpact > 0.12 && Math.abs(b.deform) < 0.16) {
+          b.vDeform -= b.maxImpact * 0.24;
+          b.deformAngle = b.impactAngle;
         }
       }
 
@@ -543,6 +562,13 @@ export function KalamiPage({ data }: { data: AppData }) {
 
   // Initialize or re-initialize balls
   useEffect(() => {
+    // If balls are already simulated in the jar and there are no new drops, preserve their exact positions!
+    if (ballsRef.current.length === inJar && !hasNew) {
+      corkHandledRef.current = true;
+      writeSeen(total);
+      return;
+    }
+
     const balls: BallPhysics[] = [];
     const now = Date.now();
 
@@ -551,21 +577,38 @@ export function KalamiPage({ data }: { data: AppData }) {
       const isNew = hasNew && i >= newStartIndex;
 
       if (!isNew) {
-        // Pre-settled at bottom in stable mechanical equilibrium (no jumping on load!)
-        balls.push({
-          x: initial.x,
-          y: initial.y,
-          vx: 0,
-          vy: 0,
-          rot: initial.turn,
-          omega: 0,
-          deform: 0,
-          vDeform: 0,
-          deformAngle: 0,
-          color: initial.color,
-          active: true,
-          spawnTime: 0,
-        });
+        // Reuse existing physical coordinates if already simulated; otherwise use restingSlot
+        const existing = ballsRef.current[i];
+        if (existing) {
+          balls.push({
+            ...existing,
+            vx: 0,
+            vy: 0,
+            omega: 0,
+            deform: 0,
+            vDeform: 0,
+            maxImpact: 0,
+            impactAngle: 0,
+            active: true,
+          });
+        } else {
+          balls.push({
+            x: initial.x,
+            y: initial.y,
+            vx: 0,
+            vy: 0,
+            rot: initial.turn,
+            omega: 0,
+            deform: 0,
+            vDeform: 0,
+            deformAngle: 0,
+            maxImpact: 0,
+            impactAngle: 0,
+            color: initial.color,
+            active: true,
+            spawnTime: 0,
+          });
+        }
       } else {
         // Option C ceremony: slow sequential entry
         const delayMs = 850 + (i - newStartIndex) * 420;
@@ -580,6 +623,8 @@ export function KalamiPage({ data }: { data: AppData }) {
           deform: 0.12,
           vDeform: 0,
           deformAngle: 90,
+          maxImpact: 0,
+          impactAngle: 0,
           color: getBalancedColor(i),
           active: false,
           spawnTime: now + delayMs,
