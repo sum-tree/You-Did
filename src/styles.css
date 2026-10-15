@@ -1544,6 +1544,14 @@ main {
   background: #d5eee6;
   border-color: #9cd6c4;
 }
+.kalami-gyro-btn.active {
+  color: #1f6354;
+  background: #d4eee5;
+  border-color: #8ed0be;
+}
+.kalami-gyro-btn.active:hover {
+  background: #c3e7dc;
+}
 .kalami-gyro-denied {
   display: inline-block;
   margin-left: 6px;

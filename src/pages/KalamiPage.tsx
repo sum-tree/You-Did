@@ -5,7 +5,6 @@ import { KalamiIcon, shortDate } from "../components.tsx";
 
 const JAR_SIZE = 100;
 const SEEN_KEY = "you-did:jar-seen";
-const GYRO_KEY = "you-did:gyro-enabled";
 
 // Precise low-saturation colors sampled from reference illustration
 const COLORS = [
@@ -312,25 +311,9 @@ function writeSeen(value: number) {
   }
 }
 
-function readGyroPref(): boolean {
-  try {
-    return window.localStorage.getItem(GYRO_KEY) === "1";
-  } catch {
-    return false;
-  }
-}
-
-function writeGyroPref(enabled: boolean) {
-  try {
-    if (enabled) {
-      window.localStorage.setItem(GYRO_KEY, "1");
-    } else {
-      window.localStorage.removeItem(GYRO_KEY);
-    }
-  } catch {
-    // Convenience only
-  }
-}
+// Module-level session memory: once granted during current browser session,
+// keep it active across all tab navigations without re-prompting!
+let sessionGyroGranted = false;
 
 export function KalamiPage({ data }: { data: AppData }) {
   const total = balance(data);
@@ -773,13 +756,17 @@ export function KalamiPage({ data }: { data: AppData }) {
   }, [inJar, total, dropFrom, jarStart, hasNew, newStartIndex, replaySeed]);
 
   // iOS DeviceOrientation permission handling
+  const isIOS =
+    typeof window !== "undefined" &&
+    typeof (window.DeviceOrientationEvent as unknown as { requestPermission?: unknown })?.requestPermission === "function";
+
   const [gyroPermState, setGyroPermState] = useState<"idle" | "granted" | "denied">(() => {
     if (typeof window === "undefined") return "idle";
     const DOE = window.DeviceOrientationEvent as unknown as {
       requestPermission?: () => Promise<string>;
     };
     if (typeof DOE?.requestPermission !== "function") return "granted";
-    return readGyroPref() ? "granted" : "idle";
+    return sessionGyroGranted ? "granted" : "idle";
   });
 
   const requestGyroPermission = async () => {
@@ -790,11 +777,11 @@ export function KalamiPage({ data }: { data: AppData }) {
       try {
         const res = await DOE.requestPermission();
         if (res === "granted") {
-          writeGyroPref(true);
+          sessionGyroGranted = true;
           setGyroPermState("granted");
           wakeUp();
         } else {
-          writeGyroPref(false);
+          sessionGyroGranted = false;
           setGyroPermState("denied");
         }
       } catch (err) {
@@ -802,51 +789,19 @@ export function KalamiPage({ data }: { data: AppData }) {
         setGyroPermState("denied");
       }
     } else {
-      writeGyroPref(true);
+      sessionGyroGranted = true;
       setGyroPermState("granted");
       wakeUp();
     }
   };
 
-  // Auto-activate gyro on iOS if previously authorized on this device
-  useEffect(() => {
-    if (!readGyroPref()) return;
-    const DOE = window.DeviceOrientationEvent as unknown as {
-      requestPermission?: () => Promise<string>;
-    };
-    if (typeof DOE?.requestPermission !== "function") return;
-
-    let active = true;
-    const activate = async () => {
-      try {
-        const res = await DOE.requestPermission!();
-        if (active && res === "granted") {
-          setGyroPermState("granted");
-          wakeUp();
-        }
-      } catch {
-        // If iOS requires user gesture, automatically activate on user's first touch/tap anywhere
-        const onFirstGesture = async () => {
-          try {
-            const res = await DOE.requestPermission!();
-            if (active && res === "granted") {
-              setGyroPermState("granted");
-              wakeUp();
-            }
-          } catch {
-            // Ignore
-          }
-        };
-        window.addEventListener("touchstart", onFirstGesture, { once: true, passive: true });
-        window.addEventListener("click", onFirstGesture, { once: true });
-      }
-    };
-
-    void activate();
-    return () => {
-      active = false;
-    };
-  }, []);
+  const toggleGyroOff = () => {
+    sessionGyroGranted = false;
+    setGyroPermState("idle");
+    tiltGx.current = 0;
+    tiltGy.current = 0.130;
+    wakeUp();
+  };
 
   // Mobile Device Orientation (Gyro tilt response) & Motion Shake
   useEffect(() => {
@@ -911,10 +866,6 @@ export function KalamiPage({ data }: { data: AppData }) {
 
   // Tap / Click Interaction: Jumble & bounce the jellies
   const handleJarTap = () => {
-    // If on iOS and gyro permission has not been requested yet, request it on this user gesture!
-    if (gyroPermState === "idle") {
-      void requestGyroPermission();
-    }
     if (jarWobble || hasNew || corkState !== "closed") return;
     setJarWobble(true);
     setTimeout(() => setJarWobble(false), 650);
@@ -1219,17 +1170,27 @@ export function KalamiPage({ data }: { data: AppData }) {
       ) : (
         <p className="kalami-hint">
           点击玻璃罐可以颠球，倾斜手机可滚动它们哦～
-          {gyroPermState === "idle" && (
+          {gyroPermState === "idle" && isIOS && (
             <button
               type="button"
               className="kalami-gyro-btn"
               onClick={requestGyroPermission}
-              title="授权手机陀螺仪感应，体验倾斜滚动"
+              title="开启手机陀螺仪感应，体验倾斜滚动"
             >
               📱 启用重力感应
             </button>
           )}
-          {gyroPermState === "denied" && (
+          {gyroPermState === "granted" && isIOS && (
+            <button
+              type="button"
+              className="kalami-gyro-btn active"
+              onClick={toggleGyroOff}
+              title="重力感应已开启，点击可关闭"
+            >
+              ✨ 重力感应开启中
+            </button>
+          )}
+          {gyroPermState === "denied" && isIOS && (
             <span className="kalami-gyro-denied">⚠️ 陀螺仪未授权（可刷新并在弹窗中允许）</span>
           )}
           {inJar > 0 && (
