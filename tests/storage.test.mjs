@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { completeTask, emptyData } from "../src/domain.ts";
+import { completeTask, emptyData, ensureWeek, saveTask } from "../src/domain.ts";
 import {
   loadData,
   saveChange,
@@ -274,3 +274,74 @@ test("version 1 records load upgraded, are kept as stored, and save as version 2
   assert.equal(result.status, "saved");
   assert.equal(JSON.parse(storage.values.get(STORAGE_KEY)).version, 2);
 });
+
+test("V1 data loaded and undergoes ensureWeek, then consecutive saves do not trigger conflict", async () => {
+  const legacy = {
+    version: 1,
+    tasks: [
+      {
+        id: "t1",
+        title: "投递简历",
+        category: "job",
+        priority: 1,
+        dueDate: "",
+        plannedWeek: "2026-10-12",
+        kind: "resume",
+        amount: 1,
+        status: "open",
+        createdAt: "2026-10-12T09:00:00",
+      },
+    ],
+    completions: [],
+    rewards: [],
+    daily: {},
+    events: [],
+    courseWeek: 6,
+  };
+  const raw = JSON.stringify(legacy);
+  const storage = store(raw);
+  const lock = locks();
+
+  // 1. Initial load of V1 data
+  let snapshot = loadData(storage);
+  assert.equal(snapshot.raw, raw);
+  assert.equal(snapshot.data.version, 2);
+
+  // 2. ensureWeek runs silently on startup
+  const ensureResult = await saveChange(storage, lock, snapshot, (previous) =>
+    ensureWeek(previous, "2026-10-12"),
+  );
+  assert.equal(ensureResult.status, "saved");
+  snapshot = ensureResult.snapshot;
+  assert.notEqual(snapshot.raw, raw);
+
+  // 3. User saves a task right after
+  const firstSave = await saveChange(storage, lock, snapshot, (previous) =>
+    saveTask(
+      previous,
+      {
+        id: "t2",
+        title: "英语面试题3题",
+        category: "speech",
+        priority: 1,
+        dueDate: "",
+        plannedWeek: "2026-10-12",
+        kind: "english",
+        amount: 3,
+        status: "open",
+        createdAt: "2026-10-12T10:00:00",
+      },
+      "2026-10-12",
+    ),
+  );
+  assert.equal(firstSave.status, "saved");
+  snapshot = firstSave.snapshot;
+
+  // 4. User saves another task right after without conflict
+  const secondSave = await saveChange(storage, lock, snapshot, (previous) =>
+    completeTask(previous, "t1", "2026-10-12"),
+  );
+  assert.equal(secondSave.status, "saved");
+  assert.equal(secondSave.snapshot.data.completions.length, 1);
+});
+

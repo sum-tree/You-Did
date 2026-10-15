@@ -4,6 +4,7 @@ import {
   CATEGORY,
   generatedSeries,
   SERIES_NAME,
+  shouldSuggestInterviewSplit,
   weekStart,
 } from "../domain.ts";
 import type { AppData, Category, Task } from "../domain.ts";
@@ -43,6 +44,7 @@ export function PoolPage({
   setView,
   onMenu,
   onBack,
+  onOpenSplit,
 }: {
   data: AppData;
   today: string;
@@ -50,6 +52,7 @@ export function PoolPage({
   setView: (view: PoolView) => void;
   onMenu: (task: Task) => void;
   onBack: () => void;
+  onOpenSplit?: (task: Task) => void;
 }) {
   const week = weekStart(today);
   const archived = view.week === "archived";
@@ -187,6 +190,26 @@ export function PoolPage({
                         {interviewHint(task, today)}
                       </span>
                     )}
+                    {task.steps && task.steps.length > 0 && (
+                      <span className="steps-progress-label">
+                        准备步骤 {task.steps.filter((s) => s.done).length}/{task.steps.length}
+                      </span>
+                    )}
+                    {task.kind === "interview" &&
+                      task.status === "open" &&
+                      onOpenSplit && (
+                        <button
+                          className="text-button"
+                          onClick={() => onOpenSplit(task)}
+                        >
+                          {task.steps && task.steps.length > 0
+                            ? "调整准备小步"
+                            : shouldSuggestInterviewSplit(task, today)
+                              ? "逾期建议：拆成小步准备"
+                              : "拆成小步准备"}
+                          <ArrowRight size={14} />
+                        </button>
+                      )}
                     <button
                       className="text-button"
                       onClick={() => onMenu(task)}

@@ -76,7 +76,7 @@ Vite 配置使用相对资源路径，兼容 GitHub Pages 的仓库子路径。�
 git -c safe.directory="E:/Github/You Did - Motivational Productivity App" status
 ```
 
-最新产品需求见 [PRD v0.4](docs/PRD.md)，写明应用核心、四个板块及各自功能与规则；当前界面参考见 [移动端设计 v0.4](docs/UI-Wireframe.md)，开发及发布状态见 [交接记录](docs/STATUS.md)。
+最新产品需求见 [PRD v0.6](docs/PRD.md)，写明应用核心、四个板块及各自功能与规则；当前界面参考见 [移动端设计 v0.6](docs/UI-Wireframe.md)，开发及发布状态见 [交接记录](docs/STATUS.md)。
 
 ## 已知边界
 

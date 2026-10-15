@@ -1,3 +1,4 @@
+import { useState } from "react";
 import {
   ArrowDownToLine,
   ArrowRight,
@@ -5,6 +6,7 @@ import {
   CalendarDays,
   Check,
   Clock3,
+  Plus,
   Upload,
   X,
 } from "lucide-react";
@@ -12,20 +14,29 @@ import {
   addDays,
   archiveTasks,
   balance,
+  buildInterviewSteps,
   CATEGORY,
   chooseDaily,
   dailyTasks,
   localDate,
   moveTasks,
   normalizeData,
+  setInterviewSteps,
+  shouldSuggestInterviewSplit,
   uncompleteTask,
   upgradeData,
   weekStart,
 } from "./domain.ts";
-import type { AppData, CalendarEvent, Task } from "./domain.ts";
+import type { AppData, CalendarEvent, InterviewStep, Task } from "./domain.ts";
 import type { Snapshot } from "./storage.ts";
 import type { Update } from "./useAppStore.ts";
-import { dateLabel, download, eventKind, longDate, Modal } from "./components.tsx";
+import {
+  dateLabel,
+  eventKind,
+  longDate,
+  Modal,
+  shareOrDownload,
+} from "./components.tsx";
 
 // Every sheet shows the latest save problem and offers the pending backup.
 export interface SyncNotice {
@@ -49,12 +60,14 @@ export function TaskMenuSheet({
   data,
   today,
   onEdit,
+  onSplit,
 }: SheetProps & {
   task: Task;
   base: Snapshot;
   data: AppData;
   today: string;
   onEdit: (task: Task, base: Snapshot) => void;
+  onSplit?: (task: Task, base: Snapshot) => void;
 }) {
   const inToday = dailyTasks(data, today).some((item) => item.id === task.id);
   return (
@@ -69,6 +82,16 @@ export function TaskMenuSheet({
               编辑任务 / 修改DDL
               <ArrowRight size={17} />
             </button>
+            {task.kind === "interview" && onSplit && (
+              <button onClick={() => onSplit(task, base)}>
+                {task.steps && task.steps.length > 0
+                  ? "调整面试准备小步"
+                  : shouldSuggestInterviewSplit(task, today)
+                    ? "逾期建议：拆成小步准备"
+                    : "拆成小步准备"}
+                <ArrowRight size={17} />
+              </button>
+            )}
             <button
               onClick={async () => {
                 const date = localDate();
@@ -428,7 +451,10 @@ export function SettingsSheet({
         <button
           className="outline-button full"
           onClick={() =>
-            download(JSON.stringify(data, null, 2), `you-did-${today}.json`)
+            void shareOrDownload(
+              JSON.stringify(data, null, 2),
+              `you-did-${today}.json`,
+            )
           }
         >
           <ArrowDownToLine size={17} />
@@ -438,7 +464,10 @@ export function SettingsSheet({
           <button
             className="outline-button full"
             onClick={() =>
-              download(rawRecovery, `you-did-original-${today}.json`)
+              void shareOrDownload(
+                rawRecovery,
+                `you-did-original-${today}.json`,
+              )
             }
           >
             导出原始记录
@@ -505,3 +534,182 @@ export function SettingsSheet({
     </Modal>
   );
 }
+
+export function InterviewSplitSheet({
+  sync,
+  update,
+  notify,
+  close,
+  task,
+  base,
+}: SheetProps & {
+  task: Task;
+  base: Snapshot;
+}) {
+  const [questionCount, setQuestionCount] = useState<number>(() => {
+    if (task.steps && task.steps.length > 0) {
+      for (const step of task.steps) {
+        const m = /共(\d+)道/.exec(step.title);
+        if (m) return Number(m[1]);
+      }
+    }
+    return 5;
+  });
+  const [steps, setSteps] = useState<InterviewStep[]>(() => {
+    if (task.steps && task.steps.length > 0) {
+      return task.steps;
+    }
+    return buildInterviewSteps(5);
+  });
+  const [newTitle, setNewTitle] = useState("");
+
+  const regenerate = (count: number) => {
+    setQuestionCount(count);
+    const generated = buildInterviewSteps(count);
+    setSteps(generated);
+  };
+
+  const handleTitleChange = (id: string, title: string) => {
+    setSteps((prev) =>
+      prev.map((s) => (s.id === id ? { ...s, title } : s)),
+    );
+  };
+
+  const handleDelete = (id: string) => {
+    setSteps((prev) => prev.filter((s) => s.id !== id));
+  };
+
+  const handleAdd = () => {
+    const trimmed = newTitle.trim();
+    if (!trimmed) return;
+    setSteps((prev) => [
+      ...prev,
+      {
+        id: `custom-step-${Date.now()}-${prev.length + 1}`,
+        title: trimmed,
+        done: false,
+      },
+    ]);
+    setNewTitle("");
+  };
+
+  return (
+    <Modal {...sync} title="拆成小步准备" close={close}>
+      <p className="form-note">
+        根据问题总数生成分步清单。小步骤不计卡拉米，全部完成后自动完成原面试任务并结算奖励。
+      </p>
+      <div className="split-form">
+        <label className="split-count-label">
+          <span>面试问题总数（1–50道）：</span>
+          <div className="count-input-group">
+            <input
+              type="number"
+              min={1}
+              max={50}
+              value={questionCount}
+              onChange={(e) => {
+                const val = Number(e.target.value);
+                if (val >= 1 && val <= 50) {
+                  regenerate(val);
+                } else {
+                  setQuestionCount(val);
+                }
+              }}
+            />
+            <button
+              type="button"
+              className="text-button"
+              onClick={() => regenerate(questionCount || 5)}
+            >
+              按此重置模板
+            </button>
+          </div>
+        </label>
+        <div className="steps-editor-list">
+          <h4>步骤清单（可编辑或删除）：</h4>
+          {steps.map((step, idx) => (
+            <div key={step.id} className="step-editor-row">
+              <span className="step-index">{idx + 1}.</span>
+              <input
+                type="text"
+                value={step.title}
+                maxLength={200}
+                aria-label={`步骤 ${idx + 1}`}
+                onChange={(e) => handleTitleChange(step.id, e.target.value)}
+              />
+              <button
+                type="button"
+                className="icon-button"
+                aria-label={`删除步骤 ${idx + 1}`}
+                onClick={() => handleDelete(step.id)}
+              >
+                <X size={16} />
+              </button>
+            </div>
+          ))}
+          <div className="add-step-row">
+            <input
+              type="text"
+              placeholder="新增自定义小步..."
+              value={newTitle}
+              maxLength={200}
+              onChange={(e) => setNewTitle(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  handleAdd();
+                }
+              }}
+            />
+            <button type="button" className="text-button" onClick={handleAdd}>
+              <Plus size={16} />
+              添加
+            </button>
+          </div>
+        </div>
+      </div>
+      <button
+        className="primary full"
+        onClick={async () => {
+          const validSteps = steps.filter((s) => s.title.trim() !== "");
+          if (validSteps.length === 0) {
+            notify("请至少保留一个准备步骤。");
+            return;
+          }
+          const result = await update(
+            (previous) => setInterviewSteps(previous, task.id, validSteps),
+            base,
+          );
+          if (!result) return;
+          close();
+          notify("已拆分成小步，每走一步都离目标更近。");
+        }}
+      >
+        <Check size={18} />
+        确认采用拆分步骤
+      </button>
+      {task.steps && task.steps.length > 0 && (
+        <button
+          className="text-button full"
+          onClick={async () => {
+            const result = await update((previous) => ({
+              ...previous,
+              tasks: previous.tasks.map((t) => {
+                if (t.id !== task.id) return t;
+                const copy = { ...t };
+                delete copy.steps;
+                return copy;
+              }),
+            }), base);
+            if (!result) return;
+            close();
+            notify("已清除拆分步骤，恢复原任务。");
+          }}
+        >
+          清除拆分步骤，恢复原任务
+        </button>
+      )}
+    </Modal>
+  );
+}
+

@@ -1,7 +1,7 @@
-import { ChevronRight, Coins } from "lucide-react";
+import { ChevronRight } from "lucide-react";
 import { addDays, balance, weekStart, weekStats } from "../domain.ts";
 import type { AppData } from "../domain.ts";
-import { categoryIcon, Progress, shortDate } from "../components.tsx";
+import { categoryIcon, KalamiIcon, Progress, shortDate } from "../components.tsx";
 
 export function AchievementPage({
   data,
@@ -19,7 +19,7 @@ export function AchievementPage({
       </p>
       <details className="reward-history balance-panel">
         <summary>
-          <Coins size={17} />
+          <KalamiIcon size={18} />
           我的卡拉米
           <strong>{balance(data)}</strong>
           <ChevronRight size={16} />

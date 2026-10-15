@@ -19,6 +19,9 @@ export type Update = (
 export function useDraft<T>(snapshot: { current: Snapshot }, initial: T) {
   const [value, setValue] = useState(initial);
   const base = useRef(snapshot.current);
+  if (!value) {
+    base.current = snapshot.current;
+  }
   const set = (next: T, origin = snapshot.current) => {
     base.current = origin;
     setValue(next);
@@ -85,6 +88,7 @@ export function useAppStore(onBlocked: () => void) {
     }
   };
   useEffect(() => {
+    void navigator.storage?.persist?.().catch(() => {});
     const updateDate = () => setToday(localDate());
     const timer = setInterval(updateDate, 30000);
     window.addEventListener("focus", updateDate);

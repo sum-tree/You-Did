@@ -8,6 +8,11 @@ export type Contribution =
   | "listening"
   | "course"
   | "none";
+export interface InterviewStep {
+  id: string;
+  title: string;
+  done: boolean;
+}
 export interface Task {
   id: string;
   title: string;
@@ -19,6 +24,7 @@ export interface Task {
   amount: number;
   status: "open" | "done" | "archived";
   createdAt: string;
+  steps?: InterviewStep[];
 }
 export interface Completion {
   taskId: string;
@@ -167,9 +173,12 @@ const INTERVIEW_TIERS = [
   { lastDay: Infinity, reward: 1 },
 ];
 function daysSinceAdded(task: Task, date: string): number {
-  return Math.round(
-    (dateObject(date).getTime() - dateObject(addedDate(task)).getTime()) /
-      86400000,
+  return Math.max(
+    0,
+    Math.round(
+      (dateObject(date).getTime() - dateObject(addedDate(task)).getTime()) /
+        86400000,
+    ),
   );
 }
 export function interviewReward(task: Task, date: string): number {
@@ -335,7 +344,15 @@ export function completeTask(data: AppData, id: string, date: string): AppData {
     {
       ...data,
       tasks: data.tasks.map((item) =>
-        item.id === id ? { ...item, status: "done" } : item,
+        item.id === id
+          ? {
+              ...item,
+              status: "done",
+              ...(item.steps
+                ? { steps: item.steps.map((s) => ({ ...s, done: true })) }
+                : {}),
+            }
+          : item,
       ),
       completions: [...data.completions, completion],
       rewards: [
@@ -367,11 +384,23 @@ export function uncompleteTask(
   if (!record || !task || record.date !== date || task.status !== "done")
     return data;
   const week = record.week;
+  const revertTask = (item: Task): Task => {
+    if (item.id !== id) return item;
+    if (item.steps && item.steps.length > 0) {
+      const steps = [...item.steps];
+      for (let i = steps.length - 1; i >= 0; i--) {
+        if (steps[i].done) {
+          steps[i] = { ...steps[i], done: false };
+          break;
+        }
+      }
+      return { ...item, status: "open", steps };
+    }
+    return { ...item, status: "open" };
+  };
   const next: AppData = {
     ...data,
-    tasks: data.tasks.map((item) =>
-      item.id === id ? { ...item, status: "open" } : item,
-    ),
+    tasks: data.tasks.map(revertTask),
     completions: data.completions.filter((item) => item.taskId !== id),
     rewards: data.rewards.filter((item) => item.id !== `task:${id}`),
   };
@@ -396,16 +425,93 @@ export function uncompleteTask(
 export function saveTask(data: AppData, task: Task, date: string): AppData {
   const existing = data.tasks.find((item) => item.id === task.id);
   if (existing && existing.status !== "open") return data;
+  const normalizedTask = existing
+    ? task
+    : { ...task, plannedWeek: weekStart(date) };
   return settleRewards(
     {
       ...data,
       tasks: existing
-        ? data.tasks.map((item) => (item.id === task.id ? task : item))
-        : [...data.tasks, task],
+        ? data.tasks.map((item) => (item.id === task.id ? normalizedTask : item))
+        : [...data.tasks, normalizedTask],
     },
     weekStart(date),
     date,
   );
+}
+export function buildInterviewSteps(questionCount: number): InterviewStep[] {
+  const count = Math.min(50, Math.max(1, Math.floor(questionCount)));
+  const titles: string[] = [
+    "搜集问题",
+    "写出所有问题的回答",
+    "每个回答读3遍",
+  ];
+  if (count > 2) {
+    titles.push("记住2道回答");
+  }
+  if (count > 5) {
+    titles.push("记住5道回答");
+  }
+  titles.push(`记住所有回答（共${count}道）`);
+  titles.push(
+    "录一次视频",
+    "回看视频找问题",
+    "录第二次视频",
+    "再次回看",
+    "录最终视频",
+  );
+  return titles.map((title, index) => ({
+    id: `step-${index + 1}`,
+    title,
+    done: false,
+  }));
+}
+export function shouldSuggestInterviewSplit(task: Task, today: string): boolean {
+  if (task.kind !== "interview" || task.status !== "open" || !task.dueDate) {
+    return false;
+  }
+  const overdueDays = Math.round(
+    (dateObject(today).getTime() - dateObject(task.dueDate).getTime()) /
+      86400000,
+  );
+  return overdueDays >= 3;
+}
+export function setInterviewSteps(
+  data: AppData,
+  taskId: string,
+  steps: InterviewStep[],
+): AppData {
+  const task = data.tasks.find((item) => item.id === taskId);
+  if (!task || task.status !== "open") return data;
+  return {
+    ...data,
+    tasks: data.tasks.map((item) =>
+      item.id === taskId ? { ...item, steps } : item,
+    ),
+  };
+}
+export function toggleInterviewStep(
+  data: AppData,
+  taskId: string,
+  stepId: string,
+  date: string,
+): AppData {
+  const task = data.tasks.find((item) => item.id === taskId);
+  if (!task || task.status !== "open" || !task.steps) return data;
+  const steps = task.steps.map((s) =>
+    s.id === stepId ? { ...s, done: !s.done } : s,
+  );
+  const allDone = steps.length > 0 && steps.every((s) => s.done);
+  const nextData: AppData = {
+    ...data,
+    tasks: data.tasks.map((item) =>
+      item.id === taskId ? { ...item, steps } : item,
+    ),
+  };
+  if (allDone) {
+    return completeTask(nextData, taskId, date);
+  }
+  return nextData;
 }
 export function archiveTasks(data: AppData, ids: string[]): AppData {
   return {
@@ -642,6 +748,15 @@ export function normalizeData(data: AppData): AppData {
       amount: t.amount,
       status: t.status,
       createdAt: t.createdAt,
+      ...(t.steps
+        ? {
+            steps: t.steps.map((s) => ({
+              id: s.id,
+              title: s.title,
+              done: s.done,
+            })),
+          }
+        : {}),
     })),
     completions: data.completions.map((c) => ({
       taskId: c.taskId,
@@ -708,6 +823,19 @@ function validateRecord(value: unknown, version: 1 | 2): boolean {
       !(validDate(d.autoWeek) && weekStart(d.autoWeek) === d.autoWeek))
   )
     return false;
+  const step = (s: unknown) =>
+    Boolean(
+      s &&
+        typeof s === "object" &&
+        text((s as InterviewStep).id, 100) &&
+        Boolean((s as InterviewStep).id) &&
+        text((s as InterviewStep).title, 200) &&
+        Boolean((s as InterviewStep).title.trim()) &&
+        typeof (s as InterviewStep).done === "boolean",
+    );
+  const stepsList = (v: unknown): v is InterviewStep[] =>
+    v === undefined ||
+    (Array.isArray(v) && v.length <= 20 && v.every(step));
   if (
     !d.tasks.every(
       (t) =>
@@ -726,7 +854,8 @@ function validateRecord(value: unknown, version: 1 | 2): boolean {
         (!["interview", "test", "course", "none"].includes(t.kind) ||
           t.amount === 1) &&
         ["open", "done", "archived"].includes(t.status) &&
-        text(t.createdAt, 50),
+        text(t.createdAt, 50) &&
+        (t.steps === undefined || (version === 2 && stepsList(t.steps))),
     )
   )
     return false;

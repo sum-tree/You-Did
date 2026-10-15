@@ -4,6 +4,7 @@ import {
   addDays,
   archiveTasks,
   balance,
+  buildInterviewSteps,
   chooseDaily,
   completeTask,
   dailyTasks,
@@ -18,6 +19,9 @@ import {
   moveTasks,
   normalizeData,
   saveTask,
+  setInterviewSteps,
+  shouldSuggestInterviewSplit,
+  toggleInterviewStep,
   uncompleteTask,
   upgradeData,
   settleRewards,
@@ -731,3 +735,152 @@ test("generated tasks report their series and todo display name", () => {
   assert.deepEqual(names[6], ["cantonese", "粤语口语练习"]);
   assert.equal(generatedSeries(task("mine", "resume", 5)), undefined);
 });
+
+test("createdAt later than date clamps daysSinceAdded to 0 and inDays never exceeds 4", () => {
+  const futureTask = task("future", "interview", 1, { createdAt: "2026-10-15T09:00:00" });
+  const info = interviewRewardInfo(futureTask, "2026-10-12");
+  assert.equal(info.now, 12);
+  assert.equal(info.next, 4);
+  assert.equal(info.inDays, 4);
+});
+
+test("cross-midnight saveTask aligns plannedWeek of new tasks to current week", () => {
+  const prevWeek = "2026-10-05";
+  const thisWeek = "2026-10-12";
+  const newTask = task("new-one", "none", 1, { plannedWeek: prevWeek });
+  const saved = saveTask(emptyData(), newTask, thisWeek);
+  assert.equal(saved.tasks[0].plannedWeek, thisWeek);
+});
+
+test("manual planning releases slots on completion allowing new tasks and preserves empty list", () => {
+  const t1 = task("t1");
+  const t2 = task("t2");
+  const t3 = task("t3");
+  const t4 = task("t4");
+  let data = dataWith(t1, t2, t3, t4);
+  // User manually schedules 3 tasks
+  data = chooseDaily(data, day, ["t1", "t2", "t3"]);
+  assert.equal(dailyTasks(data, day).length, 3);
+
+  // Complete t1
+  data = completeTask(data, "t1", day);
+  const remaining = dailyTasks(data, day);
+  // Slot is freed: only 2 open tasks remain in core slots
+  assert.equal(remaining.length, 2);
+  assert.deepEqual(remaining.map((t) => t.id), ["t2", "t3"]);
+
+  // Now t4 can be added
+  data = chooseDaily(data, day, [...remaining.map((t) => t.id), "t4"]);
+  assert.equal(dailyTasks(data, day).length, 3);
+  assert.deepEqual(dailyTasks(data, day).map((t) => t.id), ["t2", "t3", "t4"]);
+
+  // Removing all tasks leaves explicit empty array
+  data = chooseDaily(data, day, []);
+  assert.deepEqual(data.daily[day], []);
+  assert.equal(dailyTasks(data, day).length, 0);
+});
+
+test("interview split: trigger condition requires open interview with DDL overdue by at least 3 days", () => {
+  // Overdue 2 days -> false
+  const iv2 = task("iv2", "interview", 1, { dueDate: "2026-10-10" });
+  assert.equal(shouldSuggestInterviewSplit(iv2, "2026-10-12"), false);
+
+  // Overdue 3 days -> true
+  const iv3 = task("iv3", "interview", 1, { dueDate: "2026-10-09" });
+  assert.equal(shouldSuggestInterviewSplit(iv3, "2026-10-12"), true);
+
+  // Overdue 5 days -> true
+  const iv5 = task("iv5", "interview", 1, { dueDate: "2026-10-07" });
+  assert.equal(shouldSuggestInterviewSplit(iv5, "2026-10-12"), true);
+
+  // No DDL -> false
+  const ivNoDdl = task("ivNoDdl", "interview", 1, { dueDate: "" });
+  assert.equal(shouldSuggestInterviewSplit(ivNoDdl, "2026-10-12"), false);
+
+  // Already done -> false
+  const ivDone = task("ivDone", "interview", 1, { dueDate: "2026-10-07", status: "done" });
+  assert.equal(shouldSuggestInterviewSplit(ivDone, "2026-10-12"), false);
+
+  // Non-interview -> false
+  const nonIv = task("nonIv", "test", 1, { dueDate: "2026-10-07" });
+  assert.equal(shouldSuggestInterviewSplit(nonIv, "2026-10-12"), false);
+});
+
+test("buildInterviewSteps generates correct deduplicated steps for 1, 2, 4, 8 questions", () => {
+  const s1 = buildInterviewSteps(1);
+  assert.equal(s1.length, 9);
+  assert.ok(!s1.some((s) => s.title.includes("记住2道")));
+  assert.ok(!s1.some((s) => s.title.includes("记住5道")));
+  assert.equal(s1[3].title, "记住所有回答（共1道）");
+
+  const s2 = buildInterviewSteps(2);
+  assert.equal(s2.length, 9);
+  assert.ok(!s2.some((s) => s.title === "记住2道回答"));
+  assert.equal(s2[3].title, "记住所有回答（共2道）");
+
+  const s4 = buildInterviewSteps(4);
+  assert.equal(s4.length, 10);
+  assert.equal(s4[3].title, "记住2道回答");
+  assert.equal(s4[4].title, "记住所有回答（共4道）");
+
+  const s8 = buildInterviewSteps(8);
+  assert.equal(s8.length, 11);
+  assert.equal(s8[3].title, "记住2道回答");
+  assert.equal(s8[4].title, "记住5道回答");
+  assert.equal(s8[5].title, "记住所有回答（共8道）");
+});
+
+test("step toggles do not grant rewards until the last step completes the interview task", () => {
+  const iv = task("iv", "interview", 1, {
+    dueDate: "2026-10-08",
+    createdAt: "2026-10-12T08:00:00",
+  });
+  let data = dataWith(iv);
+  const steps = [
+    { id: "s1", title: "搜集问题", done: false },
+    { id: "s2", title: "写出回答", done: false },
+    { id: "s3", title: "录视频", done: false },
+  ];
+  data = setInterviewSteps(data, "iv", steps);
+  assert.equal(data.tasks[0].steps.length, 3);
+  assert.equal(balance(data), 0);
+
+  // Check step 1: no reward
+  data = toggleInterviewStep(data, "iv", "s1", day);
+  assert.equal(data.tasks[0].status, "open");
+  assert.equal(data.tasks[0].steps[0].done, true);
+  assert.equal(balance(data), 0);
+
+  // Check step 2: no reward
+  data = toggleInterviewStep(data, "iv", "s2", day);
+  assert.equal(data.tasks[0].status, "open");
+  assert.equal(balance(data), 0);
+
+  // Check step 3 (last step): completes task and awards interview reward (12)
+  data = toggleInterviewStep(data, "iv", "s3", day);
+  assert.equal(data.tasks[0].status, "done");
+  assert.equal(data.completions.length, 1);
+  assert.equal(balance(data), 12);
+  assert.ok(data.tasks[0].steps.every((s) => s.done));
+
+  // Uncomplete task resets last step and revokes reward
+  data = uncompleteTask(data, "iv", day);
+  assert.equal(data.tasks[0].status, "open");
+  assert.equal(data.tasks[0].steps[2].done, false);
+  assert.equal(data.tasks[0].steps[0].done, true);
+  assert.equal(data.tasks[0].steps[1].done, true);
+  assert.equal(balance(data), 0);
+});
+
+test("tasks with steps survive validateData and normalizeData", () => {
+  const iv = task("iv", "interview", 1, {
+    dueDate: "2026-10-08",
+    steps: buildInterviewSteps(3),
+  });
+  const data = dataWith(iv);
+  assert.equal(validateData(data), true);
+  const normalized = normalizeData(data);
+  assert.equal(validateData(normalized), true);
+  assert.equal(normalized.tasks[0].steps.length, 10);
+});
+

@@ -20,9 +20,10 @@ export function CalendarPage({
   setSelectedDate: (date: string) => void;
   openDay: (date: string) => void;
 }) {
+  const firstOfMonth = `${month.slice(0, 7)}-01`;
   const shiftMonth = (amount: number) => {
-    const d = dateObject(month);
-    d.setMonth(d.getMonth() + amount);
+    const d = dateObject(firstOfMonth);
+    d.setMonth(d.getMonth() + amount, 1);
     setMonth(localDate(d));
   };
   return (
@@ -36,7 +37,7 @@ export function CalendarPage({
           <ChevronLeft size={20} />
         </button>
         <h2>
-          {dateObject(month).toLocaleDateString("zh-CN", {
+          {dateObject(firstOfMonth).toLocaleDateString("zh-CN", {
             year: "numeric",
             month: "long",
           })}
@@ -56,7 +57,7 @@ export function CalendarPage({
       </div>
       <div className="calendar-grid">
         {Array.from({ length: 42 }, (_, i) =>
-          addDays(weekStart(month), i),
+          addDays(weekStart(firstOfMonth), i),
         ).map((date) => {
           const count = events.filter((event) => event.date === date).length;
           return (

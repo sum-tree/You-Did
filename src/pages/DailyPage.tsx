@@ -1,9 +1,10 @@
 import { ChevronRight, Ellipsis, Settings2 } from "lucide-react";
-import { CATEGORY, dailyView } from "../domain.ts";
+import { CATEGORY, dailyView, shouldSuggestInterviewSplit } from "../domain.ts";
 import type { AppData, Task } from "../domain.ts";
 import {
   dateLabel,
   interviewHint,
+  KalamiIcon,
   longDate,
   TaskCheck,
 } from "../components.tsx";
@@ -15,6 +16,8 @@ export function DailyPage({
   onMenu,
   onArrange,
   onTodo,
+  onToggleStep,
+  onOpenSplit,
 }: {
   data: AppData;
   today: string;
@@ -22,6 +25,8 @@ export function DailyPage({
   onMenu: (task: Task) => void;
   onArrange: () => void;
   onTodo: () => void;
+  onToggleStep?: (task: Task, stepId: string) => void;
+  onOpenSplit?: (task: Task) => void;
 }) {
   const todayList = dailyView(data, today);
   const manualToday = Object.hasOwn(data.daily, today);
@@ -50,7 +55,7 @@ export function DailyPage({
       </div>
       <p className="summary-line">
         今日完成 <strong>{completedToday.length}</strong> 项 · 获得{" "}
-        <strong>{earnedToday}</strong> 卡拉米
+        <KalamiIcon size={14} /> <strong>{earnedToday}</strong> 卡拉米
       </p>
       <div className="task-stack">
         {todayList.length ? (
@@ -80,6 +85,55 @@ export function DailyPage({
                   {interviewHint(task, today) && (
                     <p className="reward-hint">{interviewHint(task, today)}</p>
                   )}
+                  {task.steps && task.steps.length > 0 && (
+                    <div className="interview-steps-box">
+                      <div className="interview-steps-header">
+                        <span className="steps-progress-label">
+                          准备步骤 {task.steps.filter((s) => s.done).length}/{task.steps.length}
+                        </span>
+                        {onOpenSplit && !done && (
+                          <button
+                            type="button"
+                            className="text-button adjust-steps-btn"
+                            onClick={() => onOpenSplit(task)}
+                          >
+                            调整小步
+                          </button>
+                        )}
+                      </div>
+                      <div className="step-checkbox-list">
+                        {task.steps.map((step) => (
+                          <label
+                            key={step.id}
+                            className={`step-item ${step.done ? "is-step-done" : ""}`}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={step.done}
+                              disabled={done}
+                              onChange={() => onToggleStep?.(task, step.id)}
+                            />
+                            <span>{step.title}</span>
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  {!task.steps &&
+                    shouldSuggestInterviewSplit(task, today) &&
+                    onOpenSplit && (
+                      <div className="split-suggestion">
+                        <span>已逾期3天以上，觉得压力大不妨拆成小步</span>
+                        <button
+                          type="button"
+                          className="text-button"
+                          onClick={() => onOpenSplit(task)}
+                        >
+                          拆成小步准备
+                          <ChevronRight size={14} />
+                        </button>
+                      </div>
+                    )}
                 </div>
                 <button
                   className="icon-button more"

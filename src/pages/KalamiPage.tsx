@@ -1,36 +1,85 @@
 import { useEffect, useRef, useState } from "react";
 import { balance } from "../domain.ts";
 import type { AppData } from "../domain.ts";
-import { shortDate } from "../components.tsx";
+import { KalamiIcon, shortDate } from "../components.tsx";
 
 const JAR_SIZE = 100;
-// Glass body: rounded shoulders, flatter base so the bottom row is not cut off.
-const JAR_BODY =
-  "M64,46 H176 A40,40 0 0 1 216,86 V262 A22,22 0 0 1 194,284 H46 A22,22 0 0 1 24,262 V86 A40,40 0 0 1 64,46 Z";
 const SEEN_KEY = "you-did:jar-seen";
-// Soft jelly colours from the reference art: red, green, blue.
+
+// Precise jelly colors from reference image: Red, Green, Blue
 const COLORS = [
-  { light: "#ffd2cc", base: "#f39a90", edge: "#d9776c" },
-  { light: "#d6f2c4", base: "#9fd67f", edge: "#78b65a" },
-  { light: "#eef4fc", base: "#c9dbf2", edge: "#98b2d6" },
+  {
+    name: "red",
+    light: "#ffa39c",
+    base: "#fa6d66",
+    deep: "#e2544c",
+    beak: "#cf4138",
+  },
+  {
+    name: "green",
+    light: "#bbf5a0",
+    base: "#8ee26f",
+    deep: "#6ac747",
+    beak: "#509a2e",
+  },
+  {
+    name: "blue",
+    light: "#eef6ff",
+    base: "#d0e5fb",
+    deep: "#9fc6f0",
+    beak: "#7eaad9",
+  },
 ];
-// Deterministic packing from the bottom: rows alternate 8 and 7 jellies so the
-// offset rows stay inside the glass; a small stable jitter makes the pile look
-// hand-dropped. 100 jellies fill 14 rows.
+
+// Physical packing configuration: 16 rows totaling exactly 100 jellies.
+// Arranged naturally like soft candies in an apothecary jar.
+const ROW_CONFIG: { count: number; y: number; startX: number; stepX: number }[] = [
+  { count: 7, y: 280, startX: 58, stepX: 24 },
+  { count: 7, y: 266, startX: 53, stepX: 25.6 },
+  { count: 7, y: 252, startX: 58, stepX: 24 },
+  { count: 7, y: 238, startX: 53, stepX: 25.6 },
+  { count: 7, y: 224, startX: 58, stepX: 24 },
+  { count: 7, y: 210, startX: 53, stepX: 25.6 },
+  { count: 7, y: 196, startX: 58, stepX: 24 },
+  { count: 7, y: 182, startX: 53, stepX: 25.6 },
+  { count: 7, y: 168, startX: 58, stepX: 24 },
+  { count: 7, y: 154, startX: 53, stepX: 25.6 },
+  { count: 7, y: 140, startX: 58, stepX: 24 },
+  { count: 7, y: 126, startX: 53, stepX: 25.6 },
+  { count: 6, y: 112, startX: 68, stepX: 24.8 },
+  { count: 5, y: 98, startX: 78, stepX: 26 },
+  { count: 4, y: 84, startX: 91, stepX: 26 },
+  { count: 1, y: 72, startX: 130, stepX: 0 },
+];
+
 function slot(index: number) {
-  const pair = Math.floor(index / 15);
-  const inPair = index % 15;
-  const odd = inPair >= 8;
-  const row = pair * 2 + (odd ? 1 : 0);
-  const col = odd ? inPair - 8 : inPair;
+  let remaining = index % JAR_SIZE;
+  let cfg = ROW_CONFIG[0];
+  let col = 0;
+  for (let r = 0; r < ROW_CONFIG.length; r++) {
+    const row = ROW_CONFIG[r];
+    if (remaining < row.count) {
+      cfg = row;
+      col = remaining;
+      break;
+    }
+    remaining -= row.count;
+  }
   const hash = (index * 2654435761) >>> 0;
+  const color = COLORS[(hash >>> 9) % COLORS.length];
+  // Stable micro-jitter for organic hand-dropped feel
+  const jitterX = ((hash % 7) - 3) * 0.6;
+  const jitterY = (((hash >>> 3) % 5) - 2) * 0.5;
+  const turn = (((hash >>> 6) % 19) - 9) * 0.8;
+
   return {
-    x: (odd ? 54 : 43) + col * 22 + ((hash % 5) - 2),
-    y: 266 - row * 16 + ((hash >>> 3) % 3) - 1,
-    turn: ((hash >>> 5) % 21) - 10,
-    color: COLORS[(hash >>> 9) % COLORS.length],
+    x: cfg.startX + col * cfg.stepX + jitterX,
+    y: cfg.y + jitterY,
+    turn,
+    color,
   };
 }
+
 function readSeen(): number | null {
   try {
     const value = window.localStorage.getItem(SEEN_KEY);
@@ -39,6 +88,7 @@ function readSeen(): number | null {
     return null;
   }
 }
+
 function writeSeen(value: number) {
   try {
     window.localStorage.setItem(SEEN_KEY, String(value));
@@ -46,71 +96,166 @@ function writeSeen(value: number) {
     // Remembering what was already seen is only a convenience.
   }
 }
-function Blob({ index, drop, delay }: { index: number; drop: boolean; delay: number }) {
+
+function Blob({
+  index,
+  drop,
+  delay,
+  wobble,
+}: {
+  index: number;
+  drop: boolean;
+  delay: number;
+  wobble: boolean;
+}) {
   const { x, y, turn, color } = slot(index);
-  const gradient = `jelly-${COLORS.indexOf(color)}`;
+  const gradId = `jelly-grad-${color.name}`;
   return (
-    <g transform={`translate(${x} ${y}) rotate(${turn})`}>
+    <g transform={`translate(${x.toFixed(1)} ${y.toFixed(1)}) rotate(${turn.toFixed(1)})`}>
       <g
-        className={drop ? "jelly drop" : "jelly"}
-        style={drop ? { animationDelay: `${delay}ms` } : undefined}
+        className={drop ? "jelly drop" : wobble ? "jelly wobble" : "jelly"}
+        style={
+          drop
+            ? { animationDelay: `${delay}ms` }
+            : wobble
+            ? { animationDelay: `${(index % 7) * 40}ms` }
+            : undefined
+        }
       >
+        {/* Soft bottom shadow under the jelly */}
+        <ellipse cx="0" cy="8.5" rx="8.5" ry="2.2" fill={color.deep} opacity="0.4" />
+
+        {/* Jelly plump body with dark graphite outline (matches reference) */}
         <path
-          d="M-11,2.5 C-11,-6 -6,-10 0,-10 C6,-10 11,-6 11,2.5 C11,6.5 8,8.5 0,8.5 C-8,8.5 -11,6.5 -11,2.5Z"
-          fill={`url(#${gradient})`}
-          stroke={color.edge}
-          strokeWidth="1.2"
+          d="M -12, 1 C -12, -7, -7, -10.5, 0, -10.5 C 7, -10.5, 12, -7, 12, 1 C 12, 6.5, 8, 9.5, 0, 9.5 C -8, 9.5, -12, 6.5, -12, 1 Z"
+          fill={`url(#${gradId})`}
+          stroke="#444246"
+          strokeWidth="1.6"
+          strokeLinejoin="round"
         />
-        <ellipse cx="-4.5" cy="-5.5" rx="3.2" ry="1.7" fill="#fff" opacity="0.85" transform="rotate(-20 -4.5 -5.5)" />
-        <circle cx="-3.6" cy="-0.8" r="0.95" fill="#4b4a48" />
-        <circle cx="3.8" cy="-1.3" r="0.95" fill="#4b4a48" />
-        <path d="M-1.7,1.3 L1.9,0.9 L0,3.3 Z" fill="#fffdf8" stroke="#4b4a48" strokeWidth="0.7" strokeLinejoin="round" />
+
+        {/* Translucent glossy highlight crescent on top-left crest */}
+        <path
+          d="M -8, -2.5 C -8, -6.5 -4.5, -8.5 -0.5, -8.5 C 0.5, -8.5 0.8, -7.5 -0.2, -7.5 C -3.5, -7.5 -6.2, -5.2 -6.5, -2 C -6.7, -1.2 -8, -1.5 -8, -2.5 Z"
+          fill="#ffffff"
+          opacity="0.85"
+        />
+        {/* Secondary micro gloss dot */}
+        <circle cx="2.2" cy="-6" r="0.75" fill="#ffffff" opacity="0.85" />
+
+        {/* Two dark graphite eyes (slightly organic placement) */}
+        <circle cx="-4.2" cy="-1" r="1.1" fill="#444246" />
+        <circle cx="4.2" cy="-1.4" r="1.1" fill="#444246" />
+
+        {/* Downward-pointing triangular beak with outline & darker tinted body color */}
+        <path
+          d="M -2.2, 1.1 L 2.2, 0.7 L 0, 3.8 Z"
+          fill={color.beak}
+          stroke="#444246"
+          strokeWidth="1.1"
+          strokeLinejoin="round"
+          strokeLinecap="round"
+        />
       </g>
     </g>
   );
 }
+
 export function KalamiPage({ data }: { data: AppData }) {
   const total = balance(data);
   const fullJars = total > 0 ? Math.floor((total - 1) / JAR_SIZE) : 0;
   const inJar = total - fullJars * JAR_SIZE;
   const jarStart = fullJars * JAR_SIZE;
+
   // Kalami earned since this jar was last viewed drop in; first visit is calm.
   const [dropFrom, setDropFrom] = useState(() => {
     const seen = readSeen();
     return seen === null || seen >= total ? total : seen;
   });
   const previous = useRef(total);
+  const [jarWobble, setJarWobble] = useState(false);
+  const wobbleTimer = useRef<number | null>(null);
+
   useEffect(() => {
     if (total > previous.current) setDropFrom(previous.current);
     previous.current = total;
     writeSeen(total);
   }, [total]);
+
+  const handleJarClick = () => {
+    if (jarWobble) return;
+    setJarWobble(true);
+    if (wobbleTimer.current) window.clearTimeout(wobbleTimer.current);
+    wobbleTimer.current = window.setTimeout(() => setJarWobble(false), 700);
+  };
+
   return (
     <section className="kalami-page">
       <div className="kalami-total">
+        <KalamiIcon size={28} />
         <strong>{total}</strong>
         <span>颗卡拉米</span>
       </div>
       <svg
-        className="kalami-jar"
-        viewBox="0 0 240 300"
+        className={`kalami-jar ${jarWobble ? "wobbling" : ""}`}
+        viewBox="0 0 260 330"
         role="img"
         aria-label={`卡拉米罐：共${total}颗卡拉米${fullJars ? `，已装满${fullJars}罐` : ""}`}
+        onClick={handleJarClick}
       >
         <defs>
-          {COLORS.map((color, i) => (
-            <radialGradient key={i} id={`jelly-${i}`} cx="35%" cy="30%" r="80%">
+          {COLORS.map((color) => (
+            <radialGradient
+              key={color.name}
+              id={`jelly-grad-${color.name}`}
+              cx="32%"
+              cy="28%"
+              r="75%"
+            >
               <stop offset="0%" stopColor={color.light} />
-              <stop offset="100%" stopColor={color.base} />
+              <stop offset="65%" stopColor={color.base} />
+              <stop offset="100%" stopColor={color.deep} />
             </radialGradient>
           ))}
+          <linearGradient id="glass-back-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stopColor="#f3f9fa" stopOpacity="0.85" />
+            <stop offset="45%" stopColor="#eaf4f7" stopOpacity="0.55" />
+            <stop offset="100%" stopColor="#d9ecf2" stopOpacity="0.75" />
+          </linearGradient>
+          <linearGradient id="glass-shine-grad" x1="0%" y1="0%" x2="0%" y2="100%">
+            <stop offset="0%" stopColor="#ffffff" stopOpacity="0" />
+            <stop offset="15%" stopColor="#ffffff" stopOpacity="0.85" />
+            <stop offset="65%" stopColor="#ffffff" stopOpacity="0.6" />
+            <stop offset="100%" stopColor="#ffffff" stopOpacity="0.1" />
+          </linearGradient>
+          <linearGradient id="cork-grad" x1="0%" y1="0%" x2="100%" y2="0%">
+            <stop offset="0%" stopColor="#c9955d" />
+            <stop offset="25%" stopColor="#e1b886" />
+            <stop offset="70%" stopColor="#d4a770" />
+            <stop offset="100%" stopColor="#b68249" />
+          </linearGradient>
           <clipPath id="jar-inside">
-            <path d="M64,52 H176 A34,34 0 0 1 210,86 V262 A16,16 0 0 1 194,278 H46 A16,16 0 0 1 30,262 V86 A34,34 0 0 1 64,52 Z" />
+            <path d="M 90,66 C 60,66 32,78 32,98 V 276 C 32,295 48,304 68,304 H 192 C 212,304 228,295 228,276 V 98 C 228,78 200,66 170,66 Z" />
           </clipPath>
         </defs>
-        <rect x="70" y="12" width="100" height="22" rx="9" className="jar-lid" />
-        <rect x="80" y="32" width="80" height="18" rx="5" className="jar-neck" />
-        <path d={JAR_BODY} className="jar-glass" />
+
+        {/* 1. Cork stopper & lid */}
+        <g className="jar-cork-group">
+          <path d="M 92,26 L 96,50 H 164 L 168,26 Z" fill="url(#cork-grad)" stroke="#9c6d3b" strokeWidth="1.5" />
+          <rect x="80" y="8" width="100" height="20" rx="8" fill="url(#cork-grad)" stroke="#9c6d3b" strokeWidth="1.5" />
+          <line x1="88" y1="12" x2="172" y2="12" stroke="#ffffff" strokeOpacity="0.5" strokeWidth="1.5" strokeLinecap="round" />
+        </g>
+
+        {/* 2. Glass neck collar */}
+        <rect x="84" y="38" width="92" height="12" rx="5" fill="#f0f7f8" stroke="#a4c6cd" strokeWidth="2" fillOpacity="0.75" />
+
+        {/* 3. Glass back wall */}
+        <path
+          d="M 90,64 C 60,64 30,76 30,98 V 276 C 30,296 46,306 66,306 H 194 C 214,306 230,296 230,276 V 98 C 230,76 200,64 170,64 Z"
+          fill="url(#glass-back-grad)"
+        />
+
+        {/* 4. Karami jellies inside jar */}
         <g clipPath="url(#jar-inside)">
           {Array.from({ length: inJar }, (_, i) => {
             const drop = jarStart + i >= dropFrom;
@@ -119,14 +264,69 @@ export function KalamiPage({ data }: { data: AppData }) {
                 key={i}
                 index={i}
                 drop={drop}
-                delay={Math.min(jarStart + i - dropFrom, 20) * 70}
+                delay={Math.min(jarStart + i - dropFrom, 20) * 65}
+                wobble={jarWobble}
               />
             );
           })}
         </g>
-        <path d="M44,78 C40,130 40,200 46,250" className="jar-shine" />
-        <path d={JAR_BODY} className="jar-rim" />
+
+        {/* 5. Thick solid glass bottom */}
+        <path
+          d="M 32,282 C 32,298 48,304 68,304 H 192 C 212,304 228,298 228,282 C 200,289 60,289 32,282 Z"
+          fill="#cce7ee"
+          fillOpacity="0.45"
+        />
+        <path
+          d="M 52,298 H 208"
+          stroke="#ffffff"
+          strokeWidth="2.5"
+          strokeLinecap="round"
+          strokeOpacity="0.65"
+        />
+
+        {/* 6. Front glass reflections & specular shine (layered over jellies) */}
+        <path
+          d="M 50,86 C 40,110 38,150 40,265"
+          stroke="url(#glass-shine-grad)"
+          strokeWidth="6.5"
+          strokeLinecap="round"
+          fill="none"
+        />
+        <path
+          d="M 85,68 C 65,70 48,78 44,92"
+          stroke="#ffffff"
+          strokeWidth="2.5"
+          strokeLinecap="round"
+          strokeOpacity="0.75"
+          fill="none"
+        />
+        <path
+          d="M 222,106 V 256"
+          stroke="#ffffff"
+          strokeWidth="2.5"
+          strokeLinecap="round"
+          strokeOpacity="0.35"
+          fill="none"
+        />
+        <path
+          d="M 175,68 C 195,70 212,78 216,92"
+          stroke="#ffffff"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeOpacity="0.45"
+          fill="none"
+        />
+
+        {/* 7. Front glass perimeter rim */}
+        <path
+          d="M 90,64 C 60,64 30,76 30,98 V 276 C 30,296 46,306 66,306 H 194 C 214,306 230,296 230,276 V 98 C 230,76 200,64 170,64 Z"
+          fill="none"
+          stroke="#a3c7cf"
+          strokeWidth="2.5"
+        />
       </svg>
+
       {fullJars > 0 && (
         <p className="kalami-jars">
           {Array.from({ length: Math.min(fullJars, 10) }, (_, i) => (
@@ -135,7 +335,13 @@ export function KalamiPage({ data }: { data: AppData }) {
           已装满 {fullJars} 罐
         </p>
       )}
-      {total === 0 && <p className="kalami-empty">完成任务后，卡拉米会落进罐子里。</p>}
+
+      {total === 0 ? (
+        <p className="kalami-empty">完成任务后，圆滚滚的果冻卡拉米会掉进罐子里哦。</p>
+      ) : (
+        <p className="kalami-hint">点击玻璃罐可以戳戳它们～</p>
+      )}
+
       <h2 className="section-title">获得记录</h2>
       <div className="reward-history kalami-history">
         {data.rewards.length === 0 ? (

@@ -76,6 +76,86 @@ export const categoryIcon = (category: Category, size = 20) =>
   ) : (
     <BookOpen size={size} />
   );
+export function KalamiIcon({
+  size = 18,
+  variant = "red",
+  className = "",
+}: {
+  size?: number;
+  variant?: "red" | "green" | "blue";
+  className?: string;
+}) {
+  const id = useId();
+  const colors = {
+    red: {
+      light: "#ffa39c",
+      base: "#fa6d66",
+      deep: "#e2544c",
+      beak: "#cf4138",
+    },
+    green: {
+      light: "#bbf5a0",
+      base: "#8ee26f",
+      deep: "#6ac747",
+      beak: "#509a2e",
+    },
+    blue: {
+      light: "#eef6ff",
+      base: "#d0e5fb",
+      deep: "#9fc6f0",
+      beak: "#7eaad9",
+    },
+  }[variant];
+
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 20 20"
+      fill="none"
+      className={`kalami-icon ${className}`}
+      aria-hidden="true"
+      style={{ display: "inline-block", verticalAlign: "-0.2em", flexShrink: 0 }}
+    >
+      <defs>
+        <radialGradient
+          id={`kalami-icon-grad-${id}`}
+          cx="35%"
+          cy="28%"
+          r="75%"
+        >
+          <stop offset="0%" stopColor={colors.light} />
+          <stop offset="65%" stopColor={colors.base} />
+          <stop offset="100%" stopColor={colors.deep} />
+        </radialGradient>
+      </defs>
+      <ellipse cx="10" cy="17.2" rx="6.5" ry="1.6" fill={colors.deep} opacity="0.35" />
+      <path
+        d="M 2.5, 11 C 2.5, 5.2, 5.8, 2.5, 10, 2.5 C 14.2, 2.5, 17.5, 5.2, 17.5, 11 C 17.5, 15.5, 14.5, 18.2, 10, 18.2 C 5.5, 18.2, 2.5, 15.5, 2.5, 11 Z"
+        fill={`url(#kalami-icon-grad-${id})`}
+        stroke="#444246"
+        strokeWidth="1.3"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M 5, 8.5 C 5, 5.6 7.2, 4.2 9.8, 4.2 C 10.4, 4.2 10.5, 4.8 9.9, 4.9 C 7.8, 5.3 6.3, 6.8 6.1, 8.9 C 6, 9.5 5, 9.3 5, 8.5 Z"
+        fill="#ffffff"
+        opacity="0.88"
+      />
+      <circle cx="11.8" cy="5.4" r="0.65" fill="#ffffff" opacity="0.85" />
+      <circle cx="7" cy="9.8" r="0.9" fill="#444246" />
+      <circle cx="13" cy="9.5" r="0.9" fill="#444246" />
+      <path
+        d="M 8.6, 11.2 L 11.4, 10.9 L 10, 13 Z"
+        fill={colors.beak}
+        stroke="#444246"
+        strokeWidth="0.8"
+        strokeLinejoin="round"
+        strokeLinecap="round"
+      />
+    </svg>
+  );
+}
 export function download(content: string, name: string) {
   const url = URL.createObjectURL(
     new Blob([content], { type: "application/json" }),
@@ -85,6 +165,28 @@ export function download(content: string, name: string) {
   a.download = name;
   a.click();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+export async function shareOrDownload(content: string, name: string) {
+  try {
+    const file = new File([content], name, { type: "application/json" });
+    if (
+      typeof navigator !== "undefined" &&
+      navigator.canShare &&
+      navigator.canShare({ files: [file] }) &&
+      navigator.share
+    ) {
+      await navigator.share({
+        files: [file],
+        title: name,
+      });
+      return;
+    }
+  } catch (error) {
+    if (error instanceof Error && error.name === "AbortError") {
+      return;
+    }
+  }
+  download(content, name);
 }
 export function Progress({ value, label }: { value: number; label: string }) {
   return (
@@ -128,7 +230,10 @@ export function Modal({
       ref={ref}
       className="modal"
       aria-labelledby={titleId}
-      onCancel={close}
+      onCancel={(e) => {
+        e.preventDefault();
+        close();
+      }}
       onClick={(e) => {
         if (e.target === e.currentTarget) close();
       }}

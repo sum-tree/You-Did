@@ -2,11 +2,9 @@ import { useState } from "react";
 import {
   CalendarDays,
   Check,
-  Coins,
   ListTodo,
   Plus,
   Settings2,
-  Sparkles,
   Trophy,
 } from "lucide-react";
 import {
@@ -17,13 +15,15 @@ import {
   localDate,
   saveTask,
   schedulable,
+  toggleInterviewStep,
 } from "./domain.ts";
 import type { CalendarEvent, Task } from "./domain.ts";
-import { download, EventForm, Modal, TaskForm } from "./components.tsx";
+import { download, EventForm, KalamiIcon, Modal, TaskForm } from "./components.tsx";
 import { useAppStore, useDraft } from "./useAppStore.ts";
 import {
   ChooserSheet,
   DaySheet,
+  InterviewSplitSheet,
   SettingsSheet,
   TaskMenuSheet,
 } from "./sheets.tsx";
@@ -60,6 +60,10 @@ export default function App() {
     null,
   );
   const [chooser, setChooser, chooserBase] = useDraft(snapshot, false);
+  const [splitTask, setSplitTask, splitTaskBase] = useDraft<Task | null>(
+    snapshot,
+    null,
+  );
   const [selection, setSelection] = useState<string[]>([]);
   const [poolView, setPoolView] = useState(initialPoolView);
   const [month, setMonth] = useState(() => `${localDate().slice(0, 7)}-01`);
@@ -76,6 +80,21 @@ export default function App() {
     if (!result) return;
     const earned = balance(result.snapshot.data) - balance(base.data);
     setToast(`You did it! +${earned} 卡拉米 · 每一步都算数`);
+  }
+  async function toggleStep(task: Task, stepId: string) {
+    if (!app.canChange()) return;
+    const date = localDate();
+    app.setToday(date);
+    const base = snapshot.current;
+    const result = await update(
+      (previous) => toggleInterviewStep(previous, task.id, stepId, date),
+      base,
+    );
+    if (!result) return;
+    const earned = balance(result.snapshot.data) - balance(base.data);
+    if (earned > 0) {
+      setToast(`You did it! 全部步骤已完成，+${earned} 卡拉米 · 每一步都算数`);
+    }
   }
   async function commitTask(task: Task, todaySelected: boolean) {
     if (!app.canChange()) return;
@@ -141,7 +160,7 @@ export default function App() {
             aria-label={`卡拉米余额：${balance(data)}`}
             onClick={() => changeBoard("kalami")}
           >
-            <Coins size={17} />
+            <KalamiIcon size={18} />
             <strong>{balance(data)}</strong>
           </button>
           {onTask && page === "achievement" && (
@@ -183,22 +202,23 @@ export default function App() {
         </div>
       </header>
       <div className="board-switch" role="tablist" aria-label="板块">
-        {(
-          [
-            ["task", "任务"],
-            ["kalami", "卡拉米"],
-          ] as const
-        ).map(([key, label]) => (
-          <button
-            key={key}
-            role="tab"
-            aria-selected={board === key}
-            className={board === key ? "active" : ""}
-            onClick={() => changeBoard(key)}
-          >
-            {label}
-          </button>
-        ))}
+        <button
+          role="tab"
+          aria-selected={board === "task"}
+          className={board === "task" ? "active" : ""}
+          onClick={() => changeBoard("task")}
+        >
+          任务
+        </button>
+        <button
+          role="tab"
+          aria-selected={board === "kalami"}
+          className={`tab-kalami ${board === "kalami" ? "active" : ""}`}
+          onClick={() => changeBoard("kalami")}
+        >
+          <KalamiIcon size={16} />
+          <span>卡拉米</span>
+        </button>
       </div>
       {(app.error || app.saveIssue || pendingBackup) && (
         <div className="storage-warning" role="alert">
@@ -219,6 +239,8 @@ export default function App() {
               setChooser(true);
             }}
             onTodo={() => changePage("pool")}
+            onToggleStep={toggleStep}
+            onOpenSplit={(task) => setSplitTask(task)}
           />
         )}
         {onTask && page === "achievement" && (
@@ -232,6 +254,7 @@ export default function App() {
             setView={setPoolView}
             onMenu={(task) => setTaskMenu(task)}
             onBack={() => changePage("daily")}
+            onOpenSplit={(task) => setSplitTask(task)}
           />
         )}
         {onTask && page === "calendar" && (
@@ -275,7 +298,7 @@ export default function App() {
       )}
       {app.toast && (
         <div className="toast" role="status">
-          <Sparkles size={18} />
+          <KalamiIcon size={18} />
           {app.toast}
         </div>
       )}
@@ -310,6 +333,20 @@ export default function App() {
             setTaskForm(task, base);
             setTaskMenu(null);
           }}
+          onSplit={(task, base) => {
+            setSplitTask(task, base);
+            setTaskMenu(null);
+          }}
+        />
+      )}
+      {splitTask && (
+        <InterviewSplitSheet
+          sync={sync}
+          update={update}
+          notify={setToast}
+          close={() => setSplitTask(null)}
+          task={splitTask}
+          base={splitTaskBase.current}
         />
       )}
       {chooser && (
