@@ -107,15 +107,21 @@ function restingSlot(index: number) {
 }
 
 function constrainJarPhysics(p: { x: number; y: number; vx: number; vy: number; rot: number; omega: number }) {
-  const e = 0.35; // bouncy restitution
+  const e = 0.32; // bouncy restitution
   // 1. Floor
-  if (p.y > FLOOR) {
+  if (p.y >= FLOOR) {
     p.y = FLOOR;
     if (p.vy > 0) {
-      p.vy = -p.vy * e;
-      const slip = p.vx;
-      p.vx *= 0.82;
-      p.omega += (slip / R) * 3.5;
+      if (p.vy < 0.35) {
+        p.vy = 0;
+      } else {
+        p.vy = -p.vy * e;
+      }
+      p.vx *= 0.72;
+      p.omega *= 0.82;
+      if (Math.abs(p.vx) > 0.08) {
+        p.omega += (p.vx / R) * 1.5;
+      }
     }
   }
 
@@ -134,7 +140,11 @@ function constrainJarPhysics(p: { x: number; y: number; vx: number; vy: number; 
         if (vn > 0) {
           p.vx -= (1 + e) * vn * nx;
           p.vy -= (1 + e) * vn * ny;
-          p.omega += (-p.vx * ny + p.vy * nx) * 0.3;
+          p.omega *= 0.85;
+          const vt = -p.vx * ny + p.vy * nx;
+          if (Math.abs(vt) > 0.1) {
+            p.omega += vt * 0.2;
+          }
         }
       }
     } else if (p.y > 248 && p.x > 198) {
@@ -150,7 +160,11 @@ function constrainJarPhysics(p: { x: number; y: number; vx: number; vy: number; 
         if (vn > 0) {
           p.vx -= (1 + e) * vn * nx;
           p.vy -= (1 + e) * vn * ny;
-          p.omega += (-p.vx * ny + p.vy * nx) * 0.3;
+          p.omega *= 0.85;
+          const vt = -p.vx * ny + p.vy * nx;
+          if (Math.abs(vt) > 0.1) {
+            p.omega += vt * 0.2;
+          }
         }
       }
     } else {
@@ -158,14 +172,20 @@ function constrainJarPhysics(p: { x: number; y: number; vx: number; vy: number; 
         p.x = 32 + R;
         if (p.vx < 0) {
           p.vx = -p.vx * e;
-          p.omega -= (p.vy / R) * 3;
+          p.omega *= 0.85;
+          if (Math.abs(p.vy) > 0.1) {
+            p.omega -= (p.vy / R) * 1.5;
+          }
         }
       }
       if (p.x > 228 - R) {
         p.x = 228 - R;
         if (p.vx > 0) {
           p.vx = -p.vx * e;
-          p.omega += (p.vy / R) * 3;
+          p.omega *= 0.85;
+          if (Math.abs(p.vy) > 0.1) {
+            p.omega += (p.vy / R) * 1.5;
+          }
         }
       }
     }
@@ -178,6 +198,7 @@ function constrainJarPhysics(p: { x: number; y: number; vx: number; vy: number; 
       if (p.vx < 0) {
         p.vx = -p.vx * e;
         p.vy *= 0.85;
+        p.omega *= 0.85;
       }
     }
     if (p.x > rightLimit) {
@@ -185,17 +206,24 @@ function constrainJarPhysics(p: { x: number; y: number; vx: number; vy: number; 
       if (p.vx > 0) {
         p.vx = -p.vx * e;
         p.vy *= 0.85;
+        p.omega *= 0.85;
       }
     }
   } else {
     // 4. Neck slot
     if (p.x < 88 + R) {
       p.x = 88 + R;
-      if (p.vx < 0) p.vx = -p.vx * e;
+      if (p.vx < 0) {
+        p.vx = -p.vx * e;
+        p.omega *= 0.85;
+      }
     }
     if (p.x > 172 - R) {
       p.x = 172 - R;
-      if (p.vx > 0) p.vx = -p.vx * e;
+      if (p.vx > 0) {
+        p.vx = -p.vx * e;
+        p.omega *= 0.85;
+      }
     }
   }
 }
@@ -254,6 +282,8 @@ export function KalamiPage({ data }: { data: AppData }) {
   const blobGroupRefs = useRef<(SVGGElement | null)[]>([]);
   const rafId = useRef<number | null>(null);
   const isSimulatingRef = useRef(false);
+  const corkHandledRef = useRef(false);
+  const ceremonyDeadlineRef = useRef(0);
 
   // Gravity vectors (dynamic from phone gyro tilt)
   const tiltGx = useRef(0);
@@ -291,9 +321,20 @@ export function KalamiPage({ data }: { data: AppData }) {
 
         b.vx += gx;
         b.vy += gy;
-        b.vx *= 0.985;
-        b.vy *= 0.985;
-        b.omega *= 0.96;
+        b.vx *= 0.982;
+        b.vy *= 0.982;
+        b.omega *= 0.94;
+
+        const speed = Math.hypot(b.vx, b.vy);
+        // Once linear speed is low, rapidly damp angular velocity so balls never spin in place
+        if (speed < 0.25) {
+          b.omega *= 0.82;
+          if (Math.abs(b.omega) < 0.05) b.omega = 0;
+        }
+        if (speed < 0.04 && Math.abs(gx) < 0.05) {
+          b.vx = 0;
+          b.vy = 0;
+        }
 
         b.x += b.vx;
         b.y += b.vy;
@@ -303,7 +344,7 @@ export function KalamiPage({ data }: { data: AppData }) {
         totalMotion += Math.hypot(b.vx, b.vy);
       }
 
-      // 3. Circle-to-Circle Collision (3 relaxation iterations with rolling friction)
+      // 3. Circle-to-Circle Collision (3 relaxation iterations with Coulomb friction)
       for (let pass = 0; pass < 3; pass++) {
         for (let i = 0; i < balls.length; i++) {
           const b1 = balls[i];
@@ -330,25 +371,32 @@ export function KalamiPage({ data }: { data: AppData }) {
 
               const vrelN = (b2.vx - b1.vx) * nx + (b2.vy - b1.vy) * ny;
               if (vrelN < 0) {
-                const impulseN = -(1 + 0.35) * vrelN * 0.5;
+                const restitution = Math.abs(vrelN) < 0.35 ? 0 : 0.3;
+                const impulseN = -(1 + restitution) * vrelN * 0.5;
                 b1.vx -= nx * impulseN;
                 b1.vy -= ny * impulseN;
                 b2.vx += nx * impulseN;
                 b2.vy += ny * impulseN;
 
-                // Tangential friction causing natural rolling & slope tumbling
+                // Tangential rolling friction with Coulomb clamp
                 const tx = -ny;
                 const ty = nx;
                 const vrelT = (b2.vx - b1.vx) * tx + (b2.vy - b1.vy) * ty;
-                const impulseT = -vrelT * 0.16 * 0.5;
-                b1.vx -= tx * impulseT;
-                b1.vy -= ty * impulseT;
-                b2.vx += tx * impulseT;
-                b2.vy += ty * impulseT;
+                if (Math.abs(vrelT) > 0.04) {
+                  const maxFriction = impulseN * 0.25;
+                  const impulseT = Math.max(-maxFriction, Math.min(maxFriction, -vrelT * 0.15));
+                  b1.vx -= tx * impulseT * 0.5;
+                  b1.vy -= ty * impulseT * 0.5;
+                  b2.vx += tx * impulseT * 0.5;
+                  b2.vy += ty * impulseT * 0.5;
 
-                const dOmega = (impulseT / R) * (180 / Math.PI);
-                b1.omega -= dOmega * 0.35;
-                b2.omega -= dOmega * 0.35;
+                  const dOmega = (impulseT / R) * (180 / Math.PI) * 0.25;
+                  b1.omega -= dOmega;
+                  b2.omega += dOmega;
+                } else {
+                  b1.omega *= 0.94;
+                  b2.omega *= 0.94;
+                }
               }
             }
           }
@@ -367,20 +415,22 @@ export function KalamiPage({ data }: { data: AppData }) {
         }
       });
 
-      // 5. Sleep & Ceremony completion check
+      // 5. Ceremony & Cork Closure check
       const allActive = balls.every((b) => b.active);
-      const isCalm = totalMotion < balls.length * 0.08;
+      const avgMotion = balls.length > 0 ? totalMotion / balls.length : 0;
+      const isCalm = allActive && avgMotion < 0.15;
 
-      if (allActive && isCalm) {
+      if (isCalm) {
         calmFrames++;
       } else {
-        calmFrames = 0;
+        calmFrames = Math.max(0, calmFrames - 1);
       }
 
-      // Settle if calm for 25 frames and at least 600ms has elapsed since last wake
-      if (calmFrames > 25 && now - lastWakeTime.current > 600) {
-        isSimulatingRef.current = false;
-        if (hasNew) {
+      // Reliable cork closure when all new balls are in and settled, or on deadline
+      if (hasNew && !corkHandledRef.current && allActive) {
+        const canClose = calmFrames >= 12 || now >= ceremonyDeadlineRef.current;
+        if (canClose) {
+          corkHandledRef.current = true;
           setCorkState("closing");
           setTimeout(() => {
             setCorkState("closed");
@@ -388,8 +438,13 @@ export function KalamiPage({ data }: { data: AppData }) {
             setTimeout(() => setJarThump(false), 350);
             writeSeen(total);
             setDropFrom(total);
-          }, 700);
+          }, 650);
         }
+      }
+
+      // Settle physics loop to sleep if calm for 25 frames
+      if (calmFrames > 25 && now - lastWakeTime.current > 700) {
+        isSimulatingRef.current = false;
         return; // Physics loop sleeps
       }
 
@@ -454,8 +509,12 @@ export function KalamiPage({ data }: { data: AppData }) {
     });
 
     if (hasNew) {
+      corkHandledRef.current = false;
+      const newCount = Math.max(1, inJar - newStartIndex);
+      ceremonyDeadlineRef.current = now + 850 + newCount * 420 + 1800;
       wakeUp();
     } else {
+      corkHandledRef.current = true;
       isSimulatingRef.current = false;
       writeSeen(total);
     }
@@ -463,6 +522,9 @@ export function KalamiPage({ data }: { data: AppData }) {
     return () => {
       if (rafId.current) cancelAnimationFrame(rafId.current);
       isSimulatingRef.current = false;
+      if (hasNew) {
+        writeSeen(total);
+      }
     };
   }, [inJar, total, dropFrom, jarStart, hasNew, newStartIndex]);
 
