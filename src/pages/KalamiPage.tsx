@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { balance } from "../domain.ts";
 import type { AppData } from "../domain.ts";
 import { KalamiIcon, shortDate } from "../components.tsx";
+import { playCorkPop, playCorkThump, playJarBounce, playJellyDrop } from "../audio.ts";
 
 const JAR_SIZE = 100;
 const SEEN_KEY = "you-did:jar-seen";
@@ -355,6 +356,7 @@ export function KalamiPage({ data }: { data: AppData }) {
     setTimeout(() => {
       setCorkState("closed");
       setJarThump(true);
+      playCorkThump();
       setTimeout(() => setJarThump(false), 350);
       writeSeen(totalRef.current);
       setDropFrom(totalRef.current);
@@ -382,6 +384,7 @@ export function KalamiPage({ data }: { data: AppData }) {
       balls.forEach((b, i) => {
         if (!b.active && now >= b.spawnTime) {
           b.active = true;
+          playJellyDrop(i - newStartIndexRef.current);
           const el = blobGroupRefs.current[i];
           if (el) el.style.opacity = "1";
         }
@@ -722,6 +725,7 @@ export function KalamiPage({ data }: { data: AppData }) {
       setCorkState("closed");
       const openTimer = window.setTimeout(() => {
         setCorkState("popped");
+        playCorkPop();
       }, 120);
 
       // Independent safety fallback: cork is guaranteed to close even under continuous gyro shaking
@@ -867,6 +871,7 @@ export function KalamiPage({ data }: { data: AppData }) {
   // Tap / Click Interaction: Jumble & bounce the jellies
   const handleJarTap = () => {
     if (jarWobble || hasNew || corkState !== "closed") return;
+    playJarBounce();
     setJarWobble(true);
     setTimeout(() => setJarWobble(false), 650);
 
@@ -886,7 +891,10 @@ export function KalamiPage({ data }: { data: AppData }) {
       setCorkState("popped");
       setTimeout(() => {
         setCorkState("closing");
-        setTimeout(() => setCorkState("closed"), 500);
+        setTimeout(() => {
+          setCorkState("closed");
+          playCorkThump();
+        }, 500);
       }, 500);
     }
 
