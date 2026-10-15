@@ -31,6 +31,31 @@ const COLORS = [
   },
 ];
 
+// Balanced color permutation: guarantees exactly 1 Red, 1 Green, 1 Blue in every 3 jellies
+const PERMUTATIONS = [
+  [0, 1, 2], // Red, Green, Blue
+  [1, 0, 2], // Green, Red, Blue
+  [2, 0, 1], // Blue, Red, Green
+  [0, 2, 1], // Red, Blue, Green
+  [1, 2, 0], // Green, Blue, Red
+  [2, 1, 0], // Blue, Green, Red
+];
+
+function getBalancedColor(index: number) {
+  const group = Math.floor(index / 3);
+  const inGroup = index % 3;
+  const permIndex = (group * 7 + 11) % PERMUTATIONS.length;
+  const colorIndex = PERMUTATIONS[permIndex][inGroup];
+  return COLORS[colorIndex];
+}
+
+// Seamless unified glass jar outline: lip collar -> neck -> shoulders -> body -> base -> neck -> lip
+const JAR_OUTLINE =
+  "M 82,36 H 178 A 6,6 0 0 1 184,42 V 46 A 4,4 0 0 1 180,50 H 172 V 62 C 200,64 230,76 230,98 V 276 C 230,296 214,306 194,306 H 66 C 46,306 30,296 30,276 V 98 C 30,76 60,64 88,62 V 50 H 80 A 4,4 0 0 1 76,46 V 42 A 6,6 0 0 1 82,36 Z";
+
+const JAR_INSIDE =
+  "M 88,52 V 64 C 60,66 32,78 32,98 V 276 C 32,295 48,304 68,304 H 192 C 212,304 228,295 228,276 V 98 C 228,78 200,66 172,64 V 52 Z";
+
 // Physical packing configuration: 16 rows totaling exactly 100 jellies.
 // Arranged naturally like soft candies in an apothecary jar.
 const ROW_CONFIG: { count: number; y: number; startX: number; stepX: number }[] = [
@@ -66,7 +91,7 @@ function slot(index: number) {
     remaining -= row.count;
   }
   const hash = (index * 2654435761) >>> 0;
-  const color = COLORS[(hash >>> 9) % COLORS.length];
+  const color = getBalancedColor(index);
   // Stable micro-jitter for organic hand-dropped feel
   const jitterX = ((hash % 7) - 3) * 0.6;
   const jitterY = (((hash >>> 3) % 5) - 2) * 0.5;
@@ -235,27 +260,44 @@ export function KalamiPage({ data }: { data: AppData }) {
             <stop offset="100%" stopColor="#b68249" />
           </linearGradient>
           <clipPath id="jar-inside">
-            <path d="M 90,66 C 60,66 32,78 32,98 V 276 C 32,295 48,304 68,304 H 192 C 212,304 228,295 228,276 V 98 C 228,78 200,66 170,66 Z" />
+            <path d={JAR_INSIDE} />
           </clipPath>
         </defs>
 
         {/* 1. Cork stopper & lid */}
         <g className="jar-cork-group">
-          <path d="M 92,26 L 96,50 H 164 L 168,26 Z" fill="url(#cork-grad)" stroke="#9c6d3b" strokeWidth="1.5" />
-          <rect x="80" y="8" width="100" height="20" rx="8" fill="url(#cork-grad)" stroke="#9c6d3b" strokeWidth="1.5" />
-          <line x1="88" y1="12" x2="172" y2="12" stroke="#ffffff" strokeOpacity="0.5" strokeWidth="1.5" strokeLinecap="round" />
+          <path
+            d="M 87,32 L 91,54 H 169 L 173,32 Z"
+            fill="url(#cork-grad)"
+            stroke="#9c6d3b"
+            strokeWidth="1.2"
+          />
+          <rect
+            x="76"
+            y="12"
+            width="108"
+            height="22"
+            rx="9"
+            fill="url(#cork-grad)"
+            stroke="#9c6d3b"
+            strokeWidth="1.2"
+          />
+          <line
+            x1="86"
+            y1="16"
+            x2="174"
+            y2="16"
+            stroke="#ffffff"
+            strokeOpacity="0.5"
+            strokeWidth="1.5"
+            strokeLinecap="round"
+          />
         </g>
 
-        {/* 2. Glass neck collar */}
-        <rect x="84" y="38" width="92" height="12" rx="5" fill="#f0f7f8" stroke="#a4c6cd" strokeWidth="2" fillOpacity="0.75" />
+        {/* 2. Glass back wall (unified seamless shape) */}
+        <path d={JAR_OUTLINE} fill="url(#glass-back-grad)" />
 
-        {/* 3. Glass back wall */}
-        <path
-          d="M 90,64 C 60,64 30,76 30,98 V 276 C 30,296 46,306 66,306 H 194 C 214,306 230,296 230,276 V 98 C 230,76 200,64 170,64 Z"
-          fill="url(#glass-back-grad)"
-        />
-
-        {/* 4. Karami jellies inside jar */}
+        {/* 3. Karami jellies inside jar */}
         <g clipPath="url(#jar-inside)">
           {Array.from({ length: inJar }, (_, i) => {
             const drop = jarStart + i >= dropFrom;
@@ -271,7 +313,7 @@ export function KalamiPage({ data }: { data: AppData }) {
           })}
         </g>
 
-        {/* 5. Thick solid glass bottom */}
+        {/* 4. Thick solid glass bottom */}
         <path
           d="M 32,282 C 32,298 48,304 68,304 H 192 C 212,304 228,298 228,282 C 200,289 60,289 32,282 Z"
           fill="#cce7ee"
@@ -285,7 +327,7 @@ export function KalamiPage({ data }: { data: AppData }) {
           strokeOpacity="0.65"
         />
 
-        {/* 6. Front glass reflections & specular shine (layered over jellies) */}
+        {/* 5. Front glass reflections & specular shine (layered over jellies) */}
         <path
           d="M 50,86 C 40,110 38,150 40,265"
           stroke="url(#glass-shine-grad)"
@@ -294,12 +336,27 @@ export function KalamiPage({ data }: { data: AppData }) {
           fill="none"
         />
         <path
-          d="M 85,68 C 65,70 48,78 44,92"
+          d="M 88,52 V 62 C 65,65 44,78 40,94"
           stroke="#ffffff"
           strokeWidth="2.5"
           strokeLinecap="round"
-          strokeOpacity="0.75"
+          strokeOpacity="0.7"
           fill="none"
+        />
+        <path
+          d="M 172,52 V 62 C 195,65 216,78 220,94"
+          stroke="#ffffff"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeOpacity="0.4"
+          fill="none"
+        />
+        <path
+          d="M 84,38 H 176"
+          stroke="#ffffff"
+          strokeWidth="1.8"
+          strokeLinecap="round"
+          strokeOpacity="0.75"
         />
         <path
           d="M 222,106 V 256"
@@ -309,18 +366,10 @@ export function KalamiPage({ data }: { data: AppData }) {
           strokeOpacity="0.35"
           fill="none"
         />
-        <path
-          d="M 175,68 C 195,70 212,78 216,92"
-          stroke="#ffffff"
-          strokeWidth="2"
-          strokeLinecap="round"
-          strokeOpacity="0.45"
-          fill="none"
-        />
 
-        {/* 7. Front glass perimeter rim */}
+        {/* 6. Front glass perimeter rim (single continuous contour) */}
         <path
-          d="M 90,64 C 60,64 30,76 30,98 V 276 C 30,296 46,306 66,306 H 194 C 214,306 230,296 230,276 V 98 C 230,76 200,64 170,64 Z"
+          d={JAR_OUTLINE}
           fill="none"
           stroke="#a3c7cf"
           strokeWidth="2.5"
