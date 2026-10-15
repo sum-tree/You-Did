@@ -146,7 +146,8 @@ export function CalendarPage({
         ).map((date) => {
           const items = itemsByDate.get(date) ?? [];
           const count = items.length;
-          const displayItems = items.slice(0, 2);
+          const maxVisible = 6;
+          const displayItems = items.slice(0, maxVisible);
           const moreCount = count - displayItems.length;
 
           return (

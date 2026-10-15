@@ -510,8 +510,8 @@ main {
   gap: 2.5px;
 }
 .calendar-grid .calendar-day-btn {
-  min-height: 56px;
-  border-radius: 7px;
+  min-height: 118px;
+  border-radius: 5px;
   position: relative;
   font-size: 11px;
   display: flex;
@@ -524,6 +524,7 @@ main {
   border: 1px solid #ebeee2;
   transition: background 0.15s, border-color 0.15s;
   overflow: hidden;
+  box-sizing: border-box;
 }
 .calendar-grid .calendar-day-btn:hover {
   background: #f4f6ec;
@@ -533,7 +534,7 @@ main {
   color: #c9cdbe;
   background: #fafaf8;
   border-color: #f1f3ec;
-  opacity: 0.55;
+  opacity: 0.45;
 }
 .calendar-grid .calendar-day-btn.today {
   border-color: #c49970;
@@ -543,7 +544,7 @@ main {
   color: #a3764a;
   font-weight: 700;
   background: #fce8d5;
-  border-radius: 4px;
+  border-radius: 3px;
   padding: 0 3px;
 }
 .calendar-grid .calendar-day-btn.selected {
@@ -555,9 +556,10 @@ main {
   align-items: center;
   justify-content: space-between;
   width: 100%;
-  min-height: 14px;
+  min-height: 15px;
   margin-bottom: 2px;
   padding: 0 1px;
+  box-sizing: border-box;
 }
 .cal-day-num {
   font-size: 11px;
@@ -570,8 +572,8 @@ main {
   line-height: 1;
   color: #858e76;
   background: #eef2e6;
-  border-radius: 4px;
-  padding: 1px 2.5px;
+  border-radius: 3px;
+  padding: 1px 2px;
   font-weight: 700;
 }
 .cal-day-pills {
@@ -580,15 +582,17 @@ main {
   gap: 1.5px;
   width: 100%;
   overflow: hidden;
+  box-sizing: border-box;
 }
 .cal-task-pill {
   display: block;
   width: 100%;
   box-sizing: border-box;
+  height: 15px;
+  line-height: 15px;
   font-size: 9px;
-  line-height: 1.28;
-  padding: 1px 2px;
-  border-radius: 3px;
+  padding: 0 2.5px;
+  border-radius: 2.5px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -597,6 +601,7 @@ main {
   letter-spacing: -0.3px;
   background: #f0f3e8;
   color: #556244;
+  flex-shrink: 0;
 }
 .cal-task-pill.interview {
   background: #f3effa;
@@ -626,7 +631,7 @@ main {
   opacity: 0.55;
   text-decoration: line-through;
 }
-@media (max-width: 360px) {
+@media (max-width: 380px) {
   .calendar-card {
     padding: 10px 4px 8px;
   }
@@ -634,13 +639,49 @@ main {
     gap: 1.5px;
   }
   .calendar-grid .calendar-day-btn {
-    min-height: 54px;
+    min-height: 110px;
     padding: 2px 1px 1px;
+    border-radius: 4px;
+  }
+  .cal-day-header {
+    min-height: 14px;
+    margin-bottom: 1.5px;
+  }
+  .cal-day-num {
+    font-size: 10px;
+  }
+  .cal-day-pills {
+    gap: 1px;
   }
   .cal-task-pill {
+    height: 14px;
+    line-height: 14px;
     font-size: 8.5px;
-    padding: 0.5px 1.5px;
+    padding: 0 1.5px;
     letter-spacing: -0.4px;
+    border-radius: 2px;
+  }
+}
+@media (min-width: 600px) {
+  .calendar-grid .calendar-day-btn {
+    min-height: 126px;
+    padding: 4px 3px 3px;
+  }
+  .cal-day-header {
+    min-height: 16px;
+    margin-bottom: 3px;
+  }
+  .cal-day-num {
+    font-size: 12px;
+  }
+  .cal-day-pills {
+    gap: 2px;
+  }
+  .cal-task-pill {
+    height: 16px;
+    line-height: 16px;
+    font-size: 9.5px;
+    padding: 0 3px;
   }
 }
 .calendar-today {
@@ -1222,9 +1263,6 @@ main {
   font-size: 10px;
 }
 .icon-button {
-  min-height: 44px;
-}
-.calendar-grid button {
   min-height: 44px;
 }
 @media (max-width: 350px) {
