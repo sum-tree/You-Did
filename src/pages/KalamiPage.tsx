@@ -5,6 +5,7 @@ import { KalamiIcon, shortDate } from "../components.tsx";
 
 const JAR_SIZE = 100;
 const SEEN_KEY = "you-did:jar-seen";
+const GYRO_KEY = "you-did:gyro-enabled";
 
 // Precise low-saturation colors sampled from reference illustration
 const COLORS = [
@@ -306,6 +307,26 @@ function readSeen(): number | null {
 function writeSeen(value: number) {
   try {
     window.localStorage.setItem(SEEN_KEY, String(value));
+  } catch {
+    // Convenience only
+  }
+}
+
+function readGyroPref(): boolean {
+  try {
+    return window.localStorage.getItem(GYRO_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
+function writeGyroPref(enabled: boolean) {
+  try {
+    if (enabled) {
+      window.localStorage.setItem(GYRO_KEY, "1");
+    } else {
+      window.localStorage.removeItem(GYRO_KEY);
+    }
   } catch {
     // Convenience only
   }
@@ -757,7 +778,8 @@ export function KalamiPage({ data }: { data: AppData }) {
     const DOE = window.DeviceOrientationEvent as unknown as {
       requestPermission?: () => Promise<string>;
     };
-    return typeof DOE?.requestPermission === "function" ? "idle" : "granted";
+    if (typeof DOE?.requestPermission !== "function") return "granted";
+    return readGyroPref() ? "granted" : "idle";
   });
 
   const requestGyroPermission = async () => {
@@ -768,9 +790,11 @@ export function KalamiPage({ data }: { data: AppData }) {
       try {
         const res = await DOE.requestPermission();
         if (res === "granted") {
+          writeGyroPref(true);
           setGyroPermState("granted");
           wakeUp();
         } else {
+          writeGyroPref(false);
           setGyroPermState("denied");
         }
       } catch (err) {
@@ -778,10 +802,51 @@ export function KalamiPage({ data }: { data: AppData }) {
         setGyroPermState("denied");
       }
     } else {
+      writeGyroPref(true);
       setGyroPermState("granted");
       wakeUp();
     }
   };
+
+  // Auto-activate gyro on iOS if previously authorized on this device
+  useEffect(() => {
+    if (!readGyroPref()) return;
+    const DOE = window.DeviceOrientationEvent as unknown as {
+      requestPermission?: () => Promise<string>;
+    };
+    if (typeof DOE?.requestPermission !== "function") return;
+
+    let active = true;
+    const activate = async () => {
+      try {
+        const res = await DOE.requestPermission!();
+        if (active && res === "granted") {
+          setGyroPermState("granted");
+          wakeUp();
+        }
+      } catch {
+        // If iOS requires user gesture, automatically activate on user's first touch/tap anywhere
+        const onFirstGesture = async () => {
+          try {
+            const res = await DOE.requestPermission!();
+            if (active && res === "granted") {
+              setGyroPermState("granted");
+              wakeUp();
+            }
+          } catch {
+            // Ignore
+          }
+        };
+        window.addEventListener("touchstart", onFirstGesture, { once: true, passive: true });
+        window.addEventListener("click", onFirstGesture, { once: true });
+      }
+    };
+
+    void activate();
+    return () => {
+      active = false;
+    };
+  }, []);
 
   // Mobile Device Orientation (Gyro tilt response) & Motion Shake
   useEffect(() => {
