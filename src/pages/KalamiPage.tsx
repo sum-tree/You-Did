@@ -125,7 +125,25 @@ interface BallPhysics {
 
 function constrainJarPhysics(p: BallPhysics) {
   const e = 0.28; // Soft jelly restitution
-  // 1. Floor
+
+  // 1. Top Ceiling / Cork Stopper constraint
+  // Jar mouth begins at y=42, cork plug at y=32..54. Jellies in jar cannot pop out above CEILING
+  const CEILING = 56.0;
+  if (p.y <= CEILING && p.vy < 0) {
+    p.y = CEILING;
+    p.vy = -p.vy * e;
+    p.omega *= 0.85;
+    if (Math.abs(p.vy) > 0.3 && Math.abs(p.deform) < 0.18) {
+      p.vDeform -= 0.15;
+      p.deformAngle = 90;
+    }
+  }
+  if (p.y < CEILING && p.vy <= 0) {
+    p.y = CEILING;
+    p.vy = 0.2;
+  }
+
+  // 2. Floor
   if (p.y >= FLOOR) {
     p.y = FLOOR;
     if (p.vy > 0) {
@@ -140,7 +158,6 @@ function constrainJarPhysics(p: BallPhysics) {
       if (Math.abs(p.vx) > 0.08) {
         p.omega += (p.vx / R) * 1.5;
       }
-      // Juicy vertical squash upon hitting floor (squash vertically, expand horizontally)
       if (impactSpeed > 0.45 && Math.abs(p.deform) < 0.18) {
         const impact = Math.min(1.0, (impactSpeed - 0.35) / 3.8);
         p.vDeform -= impact * 0.32;
@@ -149,61 +166,51 @@ function constrainJarPhysics(p: BallPhysics) {
     }
   }
 
-  // 2. Corner fillets and vertical walls
+  // 3. Bottom Corners and Vertical Walls
   if (p.y >= 98) {
-    if (p.y > 248 && p.x < 62) {
-      const dx = p.x - 62;
-      const dy = p.y - 248;
+    if (p.y > 252 && p.x < 61) {
+      const dx = p.x - 61;
+      const dy = p.y - 252;
       const d = Math.hypot(dx, dy);
-      if (d > 22 && d > 0.001) {
+      if (d > 18 && d > 0.001) {
         const nx = dx / d;
         const ny = dy / d;
-        p.x = 62 + nx * 22;
-        p.y = 248 + ny * 22;
+        p.x = 61 + nx * 18;
+        p.y = 252 + ny * 18;
         const vn = p.vx * nx + p.vy * ny;
         if (vn > 0) {
           p.vx -= (1 + e) * vn * nx;
           p.vy -= (1 + e) * vn * ny;
           p.omega *= 0.85;
-          const vt = -p.vx * ny + p.vy * nx;
-          if (Math.abs(vt) > 0.1) {
-            p.omega += vt * 0.2;
-          }
           if (vn > 0.45 && Math.abs(p.deform) < 0.18) {
-            const impact = Math.min(1.0, (vn - 0.35) / 3.8);
-            p.vDeform -= impact * 0.28;
+            p.vDeform -= Math.min(1.0, (vn - 0.35) / 3.8) * 0.28;
             p.deformAngle = Math.atan2(ny, nx) * (180 / Math.PI);
           }
         }
       }
-    } else if (p.y > 248 && p.x > 198) {
-      const dx = p.x - 198;
-      const dy = p.y - 248;
+    } else if (p.y > 252 && p.x > 199) {
+      const dx = p.x - 199;
+      const dy = p.y - 252;
       const d = Math.hypot(dx, dy);
-      if (d > 22 && d > 0.001) {
+      if (d > 18 && d > 0.001) {
         const nx = dx / d;
         const ny = dy / d;
-        p.x = 198 + nx * 22;
-        p.y = 248 + ny * 22;
+        p.x = 199 + nx * 18;
+        p.y = 252 + ny * 18;
         const vn = p.vx * nx + p.vy * ny;
         if (vn > 0) {
           p.vx -= (1 + e) * vn * nx;
           p.vy -= (1 + e) * vn * ny;
           p.omega *= 0.85;
-          const vt = -p.vx * ny + p.vy * nx;
-          if (Math.abs(vt) > 0.1) {
-            p.omega += vt * 0.2;
-          }
           if (vn > 0.45 && Math.abs(p.deform) < 0.18) {
-            const impact = Math.min(1.0, (vn - 0.35) / 3.8);
-            p.vDeform -= impact * 0.28;
+            p.vDeform -= Math.min(1.0, (vn - 0.35) / 3.8) * 0.28;
             p.deformAngle = Math.atan2(ny, nx) * (180 / Math.PI);
           }
         }
       }
     } else {
-      if (p.x < 32 + R) {
-        p.x = 32 + R;
+      if (p.x < 43) {
+        p.x = 43;
         if (p.vx < 0) {
           const impactSpeed = -p.vx;
           p.vx = -p.vx * e;
@@ -212,33 +219,31 @@ function constrainJarPhysics(p: BallPhysics) {
             p.omega -= (p.vy / R) * 1.5;
           }
           if (impactSpeed > 0.45 && Math.abs(p.deform) < 0.18) {
-            const impact = Math.min(1.0, (impactSpeed - 0.35) / 3.8);
-            p.vDeform -= impact * 0.28;
-            p.deformAngle = 0; // Squashes horizontally, bulges vertically
+            p.vDeform -= Math.min(1.0, (impactSpeed - 0.35) / 3.8) * 0.28;
+            p.deformAngle = 0;
           }
         }
       }
-      if (p.x > 228 - R) {
-        p.x = 228 - R;
+      if (p.x > 217) {
+        p.x = 217;
         if (p.vx > 0) {
           const impactSpeed = p.vx;
           p.vx = -p.vx * e;
           p.omega *= 0.85;
           if (Math.abs(p.vy) > 0.1) {
-            p.omega += (p.vy / R) * 1.5;
+            p.omega -= (p.vy / R) * 1.5;
           }
           if (impactSpeed > 0.45 && Math.abs(p.deform) < 0.18) {
-            const impact = Math.min(1.0, (impactSpeed - 0.35) / 3.8);
-            p.vDeform -= impact * 0.28;
+            p.vDeform -= Math.min(1.0, (impactSpeed - 0.35) / 3.8) * 0.28;
             p.deformAngle = 0;
           }
         }
       }
     }
   } else if (p.y >= 64) {
-    // 3. Shoulders slope
-    const leftLimit = 88 - (p.y - 64) * 1.65 + R;
-    const rightLimit = 172 + (p.y - 64) * 1.65 - R;
+    // 4. Shoulders slope (seamless between x=99 at y=64 and x=43 at y=98)
+    const leftLimit = 99.0 - (p.y - 64.0) * 1.647;
+    const rightLimit = 161.0 + (p.y - 64.0) * 1.647;
     if (p.x < leftLimit) {
       p.x = leftLimit;
       if (p.vx < 0) {
@@ -264,16 +269,16 @@ function constrainJarPhysics(p: BallPhysics) {
       }
     }
   } else {
-    // 4. Neck slot
-    if (p.x < 88 + R) {
-      p.x = 88 + R;
+    // 5. Neck slot
+    if (p.x < 99.0) {
+      p.x = 99.0;
       if (p.vx < 0) {
         p.vx = -p.vx * e;
         p.omega *= 0.85;
       }
     }
-    if (p.x > 172 - R) {
-      p.x = 172 - R;
+    if (p.x > 161.0) {
+      p.x = 161.0;
       if (p.vx > 0) {
         p.vx = -p.vx * e;
         p.omega *= 0.85;
@@ -362,8 +367,11 @@ export function KalamiPage({ data }: { data: AppData }) {
 
         b.vx += gx;
         b.vy += gy;
-        // Cap max downward falling velocity so drops remain floaty, soft and visible
+        // Cap max downward and upward falling velocity so motion stays silky, stable and cannot tunnel
         if (b.vy > 1.94) b.vy = 1.94;
+        if (b.vy < -4.2) b.vy = -4.2;
+        if (b.vx > 3.2) b.vx = 3.2;
+        if (b.vx < -3.2) b.vx = -3.2;
         b.vx *= 0.982;
         b.vy *= 0.982;
         b.omega *= 0.94;
@@ -433,26 +441,29 @@ export function KalamiPage({ data }: { data: AppData }) {
               const d = Math.sqrt(d2);
               const nx = dx / d;
               const ny = dy / d;
-              const overlap = (D - d) * 0.5;
+              const overlap = D - d;
 
-              b1.x -= nx * overlap;
-              b1.y -= ny * overlap;
-              b2.x += nx * overlap;
-              b2.y += ny * overlap;
+              // Soft relaxation factor (0.4) and displacement limit prevents jitter and popcorn explosion
+              const push = Math.min(overlap * 0.4, 2.0);
+              b1.x -= nx * push * 0.5;
+              b1.y -= ny * push * 0.5;
+              b2.x += nx * push * 0.5;
+              b2.y += ny * push * 0.5;
 
               const vrelN = (b2.vx - b1.vx) * nx + (b2.vy - b1.vy) * ny;
               if (vrelN < 0) {
                 const impactSpeed = -vrelN;
-                const restitution = impactSpeed < 0.35 ? 0 : 0.28;
+                const restitution = impactSpeed < 0.35 ? 0 : 0.24;
                 const impulseN = -(1 + restitution) * vrelN * 0.5;
-                b1.vx -= nx * impulseN;
-                b1.vy -= ny * impulseN;
-                b2.vx += nx * impulseN;
-                b2.vy += ny * impulseN;
+                const clampedImpulse = Math.min(impulseN, 2.0);
+                b1.vx -= nx * clampedImpulse;
+                b1.vy -= ny * clampedImpulse;
+                b2.vx += nx * clampedImpulse;
+                b2.vy += ny * clampedImpulse;
 
                 // Track strongest impact for jelly deformation (evaluated once per frame to prevent twitching)
                 if (impactSpeed > 0.38) {
-                  const impact = Math.min(0.75, (impactSpeed - 0.3) / 3.6);
+                  const impact = Math.min(0.65, (impactSpeed - 0.3) / 3.6);
                   const colAngle = Math.atan2(ny, nx) * (180 / Math.PI);
                   if (impact > b1.maxImpact) {
                     b1.maxImpact = impact;
@@ -469,7 +480,7 @@ export function KalamiPage({ data }: { data: AppData }) {
                 const ty = nx;
                 const vrelT = (b2.vx - b1.vx) * tx + (b2.vy - b1.vy) * ty;
                 if (Math.abs(vrelT) > 0.04) {
-                  const maxFriction = impulseN * 0.25;
+                  const maxFriction = clampedImpulse * 0.25;
                   const impulseT = Math.max(-maxFriction, Math.min(maxFriction, -vrelT * 0.15));
                   b1.vx -= tx * impulseT * 0.5;
                   b1.vy -= ty * impulseT * 0.5;
@@ -488,6 +499,11 @@ export function KalamiPage({ data }: { data: AppData }) {
           }
         }
       }
+
+      // Constrain all balls against jar walls, floor and ceiling after collision resolution
+      balls.forEach((b) => {
+        if (b.active) constrainJarPhysics(b);
+      });
 
       // Apply single strongest jelly squash deformation once per frame
       for (let i = 0; i < balls.length; i++) {
@@ -708,10 +724,11 @@ export function KalamiPage({ data }: { data: AppData }) {
         if (delta > 22 && Date.now() - lastShake > 600) {
           lastShake = Date.now();
           ballsRef.current.forEach((b) => {
-            b.vy -= Math.random() * 3.8 + 2.5;
-            b.vx += (Math.random() - 0.5) * 3.5;
-            b.omega += (Math.random() - 0.5) * 18;
-            b.vDeform += (Math.random() - 0.5) * 0.38;
+            const heightFactor = Math.max(0.45, Math.min(1.0, (b.y - 50) / 220));
+            b.vy -= (Math.random() * 1.5 + 2.0) * heightFactor;
+            b.vx += (Math.random() - 0.5) * 2.5;
+            b.omega += (Math.random() - 0.5) * 12;
+            b.vDeform += (Math.random() - 0.5) * 0.25;
             b.deformAngle = (Math.random() - 0.5) * 180;
           });
           wakeUp();
@@ -733,12 +750,13 @@ export function KalamiPage({ data }: { data: AppData }) {
     setJarWobble(true);
     setTimeout(() => setJarWobble(false), 650);
 
-    // Upward explosive jolt with soft jelly squish & wobble (reverted to previous energetic bounce)
+    // Natural shockwave bounce: bottom balls receive direct impulse, transmitting smoothly up
     ballsRef.current.forEach((b) => {
-      b.vy -= Math.random() * 4.2 + 3.2;
-      b.vx += (Math.random() - 0.5) * 4.0;
-      b.omega += (Math.random() - 0.5) * 20;
-      b.vDeform += (Math.random() - 0.5) * 0.45;
+      const heightFactor = Math.max(0.45, Math.min(1.0, (b.y - 50) / 220));
+      b.vy -= (Math.random() * 1.5 + 2.2) * heightFactor;
+      b.vx += (Math.random() - 0.5) * 2.2;
+      b.omega += (Math.random() - 0.5) * 12;
+      b.vDeform += (Math.random() - 0.5) * 0.25;
       b.deformAngle = (Math.random() - 0.5) * 180;
     });
 
