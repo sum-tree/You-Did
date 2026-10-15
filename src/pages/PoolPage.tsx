@@ -1,9 +1,10 @@
-import { ArrowRight } from "lucide-react";
+import { ArrowRight, ChevronLeft } from "lucide-react";
 import { addDays, CATEGORY, weekStart } from "../domain.ts";
 import type { AppData, Category, Task } from "../domain.ts";
 import {
   contributionLabel,
   dateLabel,
+  interviewHint,
   shortDate,
   TaskCheck,
 } from "../components.tsx";
@@ -28,6 +29,7 @@ export function PoolPage({
   setView,
   onFinish,
   onMenu,
+  onBack,
 }: {
   data: AppData;
   today: string;
@@ -35,6 +37,7 @@ export function PoolPage({
   setView: (view: PoolView) => void;
   onFinish: (task: Task) => void;
   onMenu: (task: Task) => void;
+  onBack: () => void;
 }) {
   const week = weekStart(today);
   const pool = data.tasks
@@ -61,6 +64,14 @@ export function PoolPage({
     );
   const openCount = pool.filter((task) => task.status === "open").length;
   return (
+    <>
+    <div className="sub-bar">
+      <button className="text-button" onClick={onBack}>
+        <ChevronLeft size={16} />
+        每日
+      </button>
+      <h1>待办</h1>
+    </div>
     <section className="todo-table" aria-label="待办清单">
       <div className="table-tools">
         <select
@@ -150,6 +161,11 @@ export function PoolPage({
                   <span>计划周 · {shortDate(task.plannedWeek)}起</span>
                   <span>{contributionLabel(task)}</span>
                   <span>{done ? "已完成" : dateLabel(task.dueDate, today)}</span>
+                  {interviewHint(task, today) && (
+                    <span className="reward-hint">
+                      {interviewHint(task, today)}
+                    </span>
+                  )}
                   <button className="text-button" onClick={() => onMenu(task)}>
                     任务操作
                     <ArrowRight size={14} />
@@ -163,5 +179,6 @@ export function PoolPage({
         <p className="table-empty">暂无记录</p>
       )}
     </section>
+    </>
   );
 }

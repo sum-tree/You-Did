@@ -1099,3 +1099,169 @@ main {
     gap: 2px;
   }
 }
+.board-switch {
+  display: flex;
+  gap: 4px;
+  margin: 12px 22px 0;
+  padding: 4px;
+  border-radius: 12px;
+  background: #eeeee3;
+}
+.board-switch button {
+  flex: 1;
+  min-height: 36px;
+  border-radius: 9px;
+  font-size: 13px;
+  color: #8a8f7c;
+}
+.board-switch button.active {
+  background: #fffdf7;
+  box-shadow: 0 2px 5px #545c2512;
+  color: #4c5843;
+  font-weight: 650;
+}
+.page-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.pill-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  min-height: 34px;
+  padding: 0 8px 0 12px;
+  border-radius: 17px;
+  background: #e7ecdc;
+  color: #5f6d4b;
+  font-size: 12px;
+  font-weight: 600;
+}
+.sub-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.sub-bar h1 {
+  font-size: 20px;
+  line-height: 1.4;
+  letter-spacing: -0.5px;
+}
+.sub-bar .text-button {
+  font-size: 12px;
+  padding-right: 6px;
+}
+.reward-hint {
+  margin-top: 6px;
+  font-size: 11px;
+  color: #a17a3f;
+}
+.kalami-page {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+.kalami-total {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  color: #6e7562;
+  font-size: 13px;
+}
+.kalami-total strong {
+  font-size: 40px;
+  font-weight: 750;
+  color: var(--ink);
+  letter-spacing: -1px;
+}
+.kalami-jar {
+  width: min(260px, 82%);
+  height: auto;
+  margin: 6px 0 4px;
+  overflow: visible;
+}
+.jar-lid {
+  fill: #ecc79f;
+  stroke: #c99a6b;
+  stroke-width: 2;
+}
+.jar-neck {
+  fill: #eef5f6;
+  stroke: #c3d3d6;
+  stroke-width: 2;
+}
+.jar-glass {
+  fill: #eaf3f5;
+  fill-opacity: 0.6;
+}
+.jar-rim {
+  fill: none;
+  stroke: #bfd0d4;
+  stroke-width: 3;
+}
+.jar-shine {
+  fill: none;
+  stroke: #ffffff;
+  stroke-opacity: 0.7;
+  stroke-width: 6;
+  stroke-linecap: round;
+}
+.jelly {
+  transform-box: fill-box;
+  transform-origin: center bottom;
+}
+.jelly.drop {
+  animation: jelly-drop 0.9s cubic-bezier(0.3, 0.7, 0.4, 1) both;
+}
+@keyframes jelly-drop {
+  0% {
+    transform: translateY(-240px);
+    opacity: 0;
+  }
+  15% {
+    opacity: 1;
+  }
+  70% {
+    transform: translateY(0) scale(1.14, 0.84);
+  }
+  85% {
+    transform: translateY(-3px) scale(0.95, 1.06);
+  }
+  100% {
+    transform: none;
+  }
+}
+.kalami-jars {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  color: #7d866c;
+}
+.mini-jar {
+  width: 12px;
+  height: 15px;
+  border-radius: 4px 4px 5px 5px;
+  border: 1.5px solid #bfd0d4;
+  background: linear-gradient(to top, #f39a90 0 30%, #9fd67f 30% 60%, #c9dbf2 60% 85%, transparent 85%);
+}
+.kalami-empty {
+  font-size: 12px;
+  color: #949988;
+}
+.kalami-page .section-title {
+  align-self: stretch;
+  margin-top: 18px;
+}
+.reward-history.kalami-history {
+  align-self: stretch;
+  margin: 6px 0 0;
+  background: #fffefa;
+}
+@media (max-width: 350px) {
+  .board-switch {
+    margin-left: 16px;
+    margin-right: 16px;
+  }
+}

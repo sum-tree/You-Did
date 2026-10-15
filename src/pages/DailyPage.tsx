@@ -1,7 +1,12 @@
-import { Ellipsis, Settings2 } from "lucide-react";
+import { ChevronRight, Ellipsis, Settings2 } from "lucide-react";
 import { CATEGORY, dailyView } from "../domain.ts";
 import type { AppData, Task } from "../domain.ts";
-import { dateLabel, longDate, TaskCheck } from "../components.tsx";
+import {
+  dateLabel,
+  interviewHint,
+  longDate,
+  TaskCheck,
+} from "../components.tsx";
 
 export function DailyPage({
   data,
@@ -9,12 +14,14 @@ export function DailyPage({
   onFinish,
   onMenu,
   onArrange,
+  onTodo,
 }: {
   data: AppData;
   today: string;
   onFinish: (task: Task) => void;
   onMenu: (task: Task) => void;
   onArrange: () => void;
+  onTodo: () => void;
 }) {
   const todayList = dailyView(data, today);
   const manualToday = Object.hasOwn(data.daily, today);
@@ -26,14 +33,20 @@ export function DailyPage({
     <>
       <div className="page-bar">
         <h1>{longDate(today, true)}</h1>
-        <button
-          className="text-button"
-          aria-label={`调整今日安排，当前为${manualToday ? "手动" : "自动"}安排`}
-          onClick={onArrange}
-        >
-          {manualToday ? "手动安排" : "自动安排"}
-          <Settings2 size={14} />
-        </button>
+        <div className="page-actions">
+          <button
+            className="text-button"
+            aria-label={`调整今日安排，当前为${manualToday ? "手动" : "自动"}安排`}
+            onClick={onArrange}
+          >
+            {manualToday ? "手动安排" : "自动安排"}
+            <Settings2 size={14} />
+          </button>
+          <button className="pill-button" onClick={onTodo}>
+            待办
+            <ChevronRight size={14} />
+          </button>
+        </div>
       </div>
       <p className="summary-line">
         今日完成 <strong>{completedToday.length}</strong> 项 · 获得{" "}
@@ -64,6 +77,9 @@ export function DailyPage({
                     )}
                     <span className="priority">P{task.priority}</span>
                   </div>
+                  {interviewHint(task, today) && (
+                    <p className="reward-hint">{interviewHint(task, today)}</p>
+                  )}
                 </div>
                 <button
                   className="icon-button more"

@@ -500,7 +500,7 @@ export function SettingsSheet({
       </div>
       <div className="settings-foot">
         <span className="wordmark">You Did!</span>
-        <span>v0.5</span>
+        <span>v0.6</span>
       </div>
     </Modal>
   );

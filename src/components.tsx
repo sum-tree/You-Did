@@ -12,6 +12,7 @@ import {
   CATEGORY,
   dateObject,
   inferContribution,
+  interviewRewardInfo,
   KIND,
   weekStart,
 } from "./domain.ts";
@@ -30,6 +31,14 @@ export const longDate = (date: string, weekday = false) =>
   });
 export const eventKind = (kind: CalendarEvent["kind"]) =>
   kind === "interview" ? "面试 / 测试" : kind === "deadline" ? "重要DDL" : "提醒";
+// Interview cards show the reward available now and the next step, not a countdown.
+export function interviewHint(task: Task, today: string): string | null {
+  if (task.kind !== "interview" || task.status !== "open") return null;
+  const info = interviewRewardInfo(task, today);
+  return info.next === undefined
+    ? `完成可得${info.now}`
+    : `完成可得${info.now} · ${info.inDays}天后变为${info.next}`;
+}
 export const contributionLabel = (task: Task) =>
   `${KIND[task.kind].label.split("（")[0]} · ${task.amount}${KIND[task.kind].unit}`;
 export function TaskCheck({
@@ -155,11 +164,13 @@ export function Modal({
 export function TaskForm({
   existing,
   today,
+  defaultToday = false,
   commit,
   close,
 }: {
   existing?: Task;
   today: string;
+  defaultToday?: boolean;
   commit: (task: Task, todaySelected: boolean) => void;
   close: () => void;
 }) {
@@ -245,7 +256,7 @@ export function TaskForm({
       </div>
       {!existing && (
         <label className="checkbox-label">
-          <input name="today" type="checkbox" />
+          <input name="today" type="checkbox" defaultChecked={defaultToday} />
           加入今日核心任务
         </label>
       )}

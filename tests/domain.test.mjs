@@ -11,6 +11,7 @@ import {
   emptyData,
   ensureWeek,
   inferContribution,
+  interviewRewardInfo,
   localDate,
   moveTasks,
   normalizeData,
@@ -711,4 +712,12 @@ test("version 1 records are recomputed under the new reward rules", () => {
   assert.equal(upgradeData(current), current);
   assert.equal(upgradeData({ ...legacy, rewards: [] }), null);
   assert.equal(upgradeData("broken"), null);
+});
+test("interview cards can show the current reward and when it next drops", () => {
+  const iv = task("iv", "interview", 1, { createdAt: "2026-10-12T09:00:00" });
+  assert.deepEqual(interviewRewardInfo(iv, "2026-10-12"), { now: 12, next: 4, inDays: 4 });
+  assert.deepEqual(interviewRewardInfo(iv, "2026-10-15"), { now: 12, next: 4, inDays: 1 });
+  assert.deepEqual(interviewRewardInfo(iv, "2026-10-16"), { now: 4, next: 2, inDays: 3 });
+  assert.deepEqual(interviewRewardInfo(iv, "2026-10-22"), { now: 2, next: 1, inDays: 1 });
+  assert.deepEqual(interviewRewardInfo(iv, "2026-10-23"), { now: 1 });
 });

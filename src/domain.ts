@@ -160,12 +160,35 @@ function addedDate(task: Task): string {
   const created = new Date(task.createdAt);
   return Number.isNaN(created.getTime()) ? task.plannedWeek : localDate(created);
 }
-export function interviewReward(task: Task, date: string): number {
-  const days = Math.round(
+const INTERVIEW_TIERS = [
+  { lastDay: 3, reward: 12 },
+  { lastDay: 6, reward: 4 },
+  { lastDay: 10, reward: 2 },
+  { lastDay: Infinity, reward: 1 },
+];
+function daysSinceAdded(task: Task, date: string): number {
+  return Math.round(
     (dateObject(date).getTime() - dateObject(addedDate(task)).getTime()) /
       86400000,
   );
-  return days <= 3 ? 12 : days <= 6 ? 4 : days <= 10 ? 2 : 1;
+}
+export function interviewReward(task: Task, date: string): number {
+  const days = daysSinceAdded(task, date);
+  return INTERVIEW_TIERS.find((tier) => days <= tier.lastDay)!.reward;
+}
+// For the card hint: today's reward and, if it will drop, the next value and
+// how many days until then (a calm day count, not a countdown).
+export function interviewRewardInfo(
+  task: Task,
+  date: string,
+): { now: number; next?: number; inDays?: number } {
+  const days = daysSinceAdded(task, date);
+  const index = INTERVIEW_TIERS.findIndex((tier) => days <= tier.lastDay);
+  const tier = INTERVIEW_TIERS[index];
+  const next = INTERVIEW_TIERS[index + 1];
+  return next
+    ? { now: tier.reward, next: next.reward, inDays: tier.lastDay - days + 1 }
+    : { now: tier.reward };
 }
 export function taskReward(task: Task, date: string): number {
   return task.kind === "interview"
