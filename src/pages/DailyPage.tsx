@@ -3,10 +3,10 @@ import { CATEGORY, dailyView, shouldSuggestInterviewSplit } from "../domain.ts";
 import type { AppData, Task } from "../domain.ts";
 import {
   dateLabel,
-  interviewHint,
   KalamiIcon,
   longDate,
   TaskCheck,
+  taskRewardHint,
 } from "../components.tsx";
 
 export function DailyPage({
@@ -82,8 +82,8 @@ export function DailyPage({
                     )}
                     <span className="priority">P{task.priority}</span>
                   </div>
-                  {interviewHint(task, today) && (
-                    <p className="reward-hint">{interviewHint(task, today)}</p>
+                  {taskRewardHint(task, today) && (
+                    <p className="reward-hint">{taskRewardHint(task, today)}</p>
                   )}
                   {task.steps && task.steps.length > 0 && (
                     <div className="interview-steps-box">

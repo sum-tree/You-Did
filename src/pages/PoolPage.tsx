@@ -11,8 +11,8 @@ import type { AppData, Category, Task } from "../domain.ts";
 import {
   contributionLabel,
   dateLabel,
-  interviewHint,
   shortDate,
+  taskRewardHint,
 } from "../components.tsx";
 
 // Held by App so the filters survive switching pages.
@@ -185,9 +185,9 @@ export function PoolPage({
                     <span>计划周 · {shortDate(task.plannedWeek)}起</span>
                     <span>{contributionLabel(task)}</span>
                     <span>{dateLabel(task.dueDate, today)}</span>
-                    {interviewHint(task, today) && (
+                    {taskRewardHint(task, today) && (
                       <span className="reward-hint">
-                        {interviewHint(task, today)}
+                        {taskRewardHint(task, today)}
                       </span>
                     )}
                     {task.steps && task.steps.length > 0 && (

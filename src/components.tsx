@@ -14,6 +14,7 @@ import {
   inferContribution,
   interviewRewardInfo,
   KIND,
+  taskReward,
   weekStart,
 } from "./domain.ts";
 import type { CalendarEvent, Category, Task } from "./domain.ts";
@@ -31,13 +32,23 @@ export const longDate = (date: string, weekday = false) =>
   });
 export const eventKind = (kind: CalendarEvent["kind"]) =>
   kind === "interview" ? "面试 / 测试" : kind === "deadline" ? "重要DDL" : "提醒";
-// Interview cards show the reward available now and the next step, not a countdown.
+
+// Task cards display the kalami reward available upon completion according to PRD-New 4.1
+export function taskRewardHint(task: Task, today: string): string | null {
+  if (task.status !== "open") return null;
+  if (task.kind === "interview") {
+    const info = interviewRewardInfo(task, today);
+    return info.next === undefined
+      ? `完成可得${info.now}卡拉米`
+      : `完成可得${info.now}卡拉米 · ${info.inDays}天后变为${info.next}`;
+  }
+  const reward = taskReward(task, today);
+  return `完成可得${reward}卡拉米`;
+}
+
+// Keep interviewHint pointing to taskRewardHint for seamless compatibility
 export function interviewHint(task: Task, today: string): string | null {
-  if (task.kind !== "interview" || task.status !== "open") return null;
-  const info = interviewRewardInfo(task, today);
-  return info.next === undefined
-    ? `完成可得${info.now}`
-    : `完成可得${info.now} · ${info.inDays}天后变为${info.next}`;
+  return taskRewardHint(task, today);
 }
 export const contributionLabel = (task: Task) =>
   `${KIND[task.kind].label.split("（")[0]} · ${task.amount}${KIND[task.kind].unit}`;

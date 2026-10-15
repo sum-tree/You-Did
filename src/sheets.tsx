@@ -36,6 +36,7 @@ import {
   longDate,
   Modal,
   shareOrDownload,
+  taskRewardHint,
 } from "./components.tsx";
 
 // Every sheet shows the latest save problem and offers the pending backup.
@@ -74,6 +75,7 @@ export function TaskMenuSheet({
     <Modal {...sync} title={task.title} close={close}>
       <p className="form-note">
         {CATEGORY[task.category].name} · {dateLabel(task.dueDate, today)}
+        {task.status === "open" && ` · ${taskRewardHint(task, today)}`}
       </p>
       <div className="action-list">
         {task.status === "open" ? (
