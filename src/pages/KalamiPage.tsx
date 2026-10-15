@@ -691,11 +691,11 @@ export function KalamiPage({ data }: { data: AppData }) {
         if (delta > 22 && Date.now() - lastShake > 600) {
           lastShake = Date.now();
           ballsRef.current.forEach((b) => {
-            b.vy -= Math.random() * 3.8 + 2.5;
-            b.vx += (Math.random() - 0.5) * 3.5;
-            b.omega += (Math.random() - 0.5) * 18;
-            b.vDeform += (Math.random() - 0.5) * 0.38;
-            b.deformAngle = (Math.random() - 0.5) * 180;
+            b.vy -= Math.random() * 2.4 + 1.6;
+            b.vx += (Math.random() - 0.5) * 2.0;
+            b.omega += (Math.random() - 0.5) * 12;
+            b.vDeform -= Math.random() * 0.14 + 0.08;
+            b.deformAngle = 90;
           });
           wakeUp();
         }
@@ -716,13 +716,13 @@ export function KalamiPage({ data }: { data: AppData }) {
     setJarWobble(true);
     setTimeout(() => setJarWobble(false), 650);
 
-    // Upward explosive jolt with soft jelly squish & wobble
+    // Soft, natural upward bounce with jelly squish
     ballsRef.current.forEach((b) => {
-      b.vy -= Math.random() * 4.2 + 3.2;
-      b.vx += (Math.random() - 0.5) * 4.0;
-      b.omega += (Math.random() - 0.5) * 20;
-      b.vDeform += (Math.random() - 0.5) * 0.45;
-      b.deformAngle = (Math.random() - 0.5) * 180;
+      b.vy -= Math.random() * 2.2 + 1.6;
+      b.vx += (Math.random() - 0.5) * 2.0;
+      b.omega += (Math.random() - 0.5) * 10;
+      b.vDeform -= Math.random() * 0.14 + 0.08;
+      b.deformAngle = 90;
     });
 
     // Cork gives a playful pop & snaps back
