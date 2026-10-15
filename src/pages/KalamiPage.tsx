@@ -314,9 +314,7 @@ export function KalamiPage({ data }: { data: AppData }) {
   const hasNew = jarStart + inJar > dropFrom && dropFrom < total;
   const newStartIndex = Math.max(0, dropFrom - jarStart);
 
-  const [corkState, setCorkState] = useState<"closed" | "popped" | "closing">(
-    hasNew ? "popped" : "closed"
-  );
+  const [corkState, setCorkState] = useState<"closed" | "popped" | "closing">("closed");
   const [jarThump, setJarThump] = useState(false);
   const [jarWobble, setJarWobble] = useState(false);
 
@@ -327,9 +325,9 @@ export function KalamiPage({ data }: { data: AppData }) {
   const corkHandledRef = useRef(false);
   const ceremonyDeadlineRef = useRef(0);
 
-  // Gravity vectors (dynamic from phone gyro tilt)
+  // Gravity vectors (dynamic from phone gyro tilt, reduced for floaty relaxed fall)
   const tiltGx = useRef(0);
-  const tiltGy = useRef(0.28);
+  const tiltGy = useRef(0.14);
   const lastWakeTime = useRef(0);
 
   const wakeUp = () => {
@@ -363,6 +361,8 @@ export function KalamiPage({ data }: { data: AppData }) {
 
         b.vx += gx;
         b.vy += gy;
+        // Cap max downward falling velocity so drops remain floaty, soft and visible
+        if (b.vy > 2.4) b.vy = 2.4;
         b.vx *= 0.982;
         b.vy *= 0.982;
         b.omega *= 0.94;
@@ -611,16 +611,16 @@ export function KalamiPage({ data }: { data: AppData }) {
         }
       } else {
         // Option C ceremony: slow sequential entry
-        const delayMs = 850 + (i - newStartIndex) * 420;
+        const delayMs = 1100 + (i - newStartIndex) * 550;
         const hash = (i * 2654435761) >>> 0;
         balls.push({
           x: 130 + (((hash >>> 3) % 9) - 4) * 1.5,
           y: 30,
           vx: (((hash >>> 7) % 7) - 3) * 0.25,
-          vy: 1.2,
+          vy: 0.45,
           rot: (((hash >>> 11) % 25) - 12) * 2,
           omega: (((hash >>> 15) % 11) - 5) * 1.2,
-          deform: 0.12,
+          deform: 0.10,
           vDeform: 0,
           deformAngle: 90,
           maxImpact: 0,
@@ -649,8 +649,24 @@ export function KalamiPage({ data }: { data: AppData }) {
     if (hasNew) {
       corkHandledRef.current = false;
       const newCount = Math.max(1, inJar - newStartIndex);
-      ceremonyDeadlineRef.current = now + 850 + newCount * 420 + 1800;
+      ceremonyDeadlineRef.current = now + 1100 + newCount * 550 + 2600;
+
+      // Ensure cork begins closed and smoothly pops open after mounting paint
+      setCorkState("closed");
+      const openTimer = window.setTimeout(() => {
+        setCorkState("popped");
+      }, 120);
+
       wakeUp();
+
+      return () => {
+        clearTimeout(openTimer);
+        if (rafId.current) cancelAnimationFrame(rafId.current);
+        isSimulatingRef.current = false;
+        if (hasNew) {
+          writeSeen(total);
+        }
+      };
     } else {
       corkHandledRef.current = true;
       isSimulatingRef.current = false;
@@ -676,8 +692,8 @@ export function KalamiPage({ data }: { data: AppData }) {
         if (Math.abs(gamma - lastGamma) > 1.2) {
           lastGamma = gamma;
           const rad = (gamma * Math.PI) / 180;
-          tiltGx.current = Math.sin(rad) * 0.32;
-          tiltGy.current = Math.cos(rad) * 0.32;
+          tiltGx.current = Math.sin(rad) * 0.16;
+          tiltGy.current = Math.cos(rad) * 0.16;
           wakeUp();
         }
       }
@@ -691,11 +707,11 @@ export function KalamiPage({ data }: { data: AppData }) {
         if (delta > 22 && Date.now() - lastShake > 600) {
           lastShake = Date.now();
           ballsRef.current.forEach((b) => {
-            b.vy -= Math.random() * 2.4 + 1.6;
-            b.vx += (Math.random() - 0.5) * 2.0;
-            b.omega += (Math.random() - 0.5) * 12;
-            b.vDeform -= Math.random() * 0.14 + 0.08;
-            b.deformAngle = 90;
+            b.vy -= Math.random() * 3.8 + 2.5;
+            b.vx += (Math.random() - 0.5) * 3.5;
+            b.omega += (Math.random() - 0.5) * 18;
+            b.vDeform += (Math.random() - 0.5) * 0.38;
+            b.deformAngle = (Math.random() - 0.5) * 180;
           });
           wakeUp();
         }
@@ -716,13 +732,13 @@ export function KalamiPage({ data }: { data: AppData }) {
     setJarWobble(true);
     setTimeout(() => setJarWobble(false), 650);
 
-    // Soft, natural upward bounce with jelly squish
+    // Upward explosive jolt with soft jelly squish & wobble (reverted to previous energetic bounce)
     ballsRef.current.forEach((b) => {
-      b.vy -= Math.random() * 2.2 + 1.6;
-      b.vx += (Math.random() - 0.5) * 2.0;
-      b.omega += (Math.random() - 0.5) * 10;
-      b.vDeform -= Math.random() * 0.14 + 0.08;
-      b.deformAngle = 90;
+      b.vy -= Math.random() * 4.2 + 3.2;
+      b.vx += (Math.random() - 0.5) * 4.0;
+      b.omega += (Math.random() - 0.5) * 20;
+      b.vDeform += (Math.random() - 0.5) * 0.45;
+      b.deformAngle = (Math.random() - 0.5) * 180;
     });
 
     // Cork gives a playful pop & snaps back
@@ -987,7 +1003,20 @@ export function KalamiPage({ data }: { data: AppData }) {
       {total === 0 ? (
         <p className="kalami-empty">完成任务后，圆滚滚的果冻卡拉米会掉进罐子里哦。</p>
       ) : (
-        <p className="kalami-hint">点击玻璃罐可以颠球，倾斜手机可滚动它们哦～</p>
+        <p className="kalami-hint">
+          点击玻璃罐可以颠球，倾斜手机可滚动它们哦～
+          {inJar > 0 && (
+            <button
+              type="button"
+              className="kalami-replay-btn"
+              onClick={() => {
+                setDropFrom(Math.max(0, total - 1));
+              }}
+            >
+              重播掉落
+            </button>
+          )}
+        </p>
       )}
 
       <h2 className="section-title">获得记录</h2>
