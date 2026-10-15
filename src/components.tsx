@@ -52,8 +52,7 @@ export function TaskCheck({
   return (
     <button
       className={`task-check ${done ? "checked" : ""}`}
-      aria-label={`${done ? "已完成" : "完成"}：${task.title}`}
-      disabled={task.status !== "open"}
+      aria-label={`${done ? "点击撤销完成" : "完成任务"}：${task.title}`}
       onClick={() => onFinish(task)}
     >
       {done && <Check size={17} />}
@@ -271,13 +270,13 @@ export function TaskForm({
   today,
   defaultToday = false,
   commit,
-  close,
+  close: _close,
 }: {
   existing?: Task;
   today: string;
   defaultToday?: boolean;
-  commit: (task: Task, todaySelected: boolean) => void;
-  close: () => void;
+  commit: (task: Task, todaySelected: boolean, addToCalendar?: boolean) => void;
+  close?: () => void;
 }) {
   const [category, setCategory] = useState<Category>(
     existing?.category ?? "job",
@@ -308,6 +307,7 @@ export function TaskForm({
         createdAt: existing?.createdAt ?? new Date().toISOString(),
       },
       fields.get("today") === "on",
+      fields.get("calendar") === "on",
     );
   };
   return (
@@ -360,17 +360,20 @@ export function TaskForm({
         </label>
       </div>
       {!existing && (
-        <label className="checkbox-label">
-          <input name="today" type="checkbox" defaultChecked={defaultToday} />
-          加入今日核心任务
-        </label>
+        <div className="form-checkboxes">
+          <label className="checkbox-label">
+            <input name="today" type="checkbox" defaultChecked={defaultToday} />
+            加入今日任务
+          </label>
+          <label className="checkbox-label">
+            <input name="calendar" type="checkbox" />
+            加入日历
+          </label>
+        </div>
       )}
       <button className="primary" type="submit">
         {existing ? "保存修改" : "添加任务"}
         <Plus size={18} />
-      </button>
-      <button className="text-button" type="button" onClick={close}>
-        再想一想
       </button>
     </form>
   );

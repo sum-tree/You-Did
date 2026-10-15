@@ -16,6 +16,7 @@ import {
   saveTask,
   schedulable,
   toggleInterviewStep,
+  uncompleteTask,
 } from "./domain.ts";
 import type { CalendarEvent, Task } from "./domain.ts";
 import { download, EventForm, KalamiIcon, Modal, TaskForm } from "./components.tsx";
@@ -71,6 +72,33 @@ export default function App() {
     const date = localDate();
     app.setToday(date);
     const base = snapshot.current;
+    if (task.status === "done") {
+      const isToday = data.completions.some(
+        (item) => item.taskId === task.id && item.date === date,
+      );
+      if (!isToday) {
+        setToast("只能撤销今天完成的任务。");
+        return;
+      }
+      const result = await update((previous) => {
+        const undone = uncompleteTask(previous, task.id, date);
+        const currentDaily = undone.daily[date] ?? dailyTasks(previous, date).map((t) => t.id);
+        const nextDaily = currentDaily.includes(task.id)
+          ? currentDaily
+          : [task.id, ...currentDaily];
+        return {
+          ...undone,
+          daily: {
+            ...undone.daily,
+            [date]: nextDaily,
+          },
+        };
+      }, base);
+      if (!result) return;
+      const taken = balance(base.data) - balance(result.snapshot.data);
+      setToast(`已撤销完成，收回${taken}卡拉米。`);
+      return;
+    }
     const result = await update(
       (previous) => completeTask(previous, task.id, date),
       base,
@@ -94,7 +122,11 @@ export default function App() {
       setToast(`You did it! 全部步骤已完成，+${earned} 卡拉米 · 每一步都算数`);
     }
   }
-  async function commitTask(task: Task, todaySelected: boolean) {
+  async function commitTask(
+    task: Task,
+    todaySelected: boolean,
+    addToCalendar?: boolean,
+  ) {
     if (!app.canChange()) return;
     const date = localDate();
     const dailyNow = dailyTasks(data, date);
@@ -104,16 +136,33 @@ export default function App() {
     }
     const result = await update((previous) => {
       const next = saveTask(previous, task, date);
-      return todaySelected
+      const withDaily = todaySelected
         ? chooseDaily(next, date, [
             ...dailyTasks(previous, date).map((item) => item.id),
             task.id,
           ])
         : next;
+      if (!addToCalendar) return withDaily;
+      const newEvent: CalendarEvent = {
+        id: crypto.randomUUID(),
+        title: task.title,
+        date: task.dueDate || date,
+        time: "",
+        kind: task.kind === "interview" ? "interview" : "deadline",
+        note: "",
+      };
+      return {
+        ...withDaily,
+        events: [...withDaily.events, newEvent],
+      };
     }, taskFormBase.current);
     if (!result) return;
     setTaskForm(null);
-    setToast("任务已保存，小小的一步也很棒。");
+    setToast(
+      addToCalendar
+        ? "任务已保存并加入日历，小小的一步也很棒。"
+        : "任务已保存，小小的一步也很棒。",
+    );
   }
   const pendingBackup = app.pendingBackup;
   const sync: SyncNotice = {

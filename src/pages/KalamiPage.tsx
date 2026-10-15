@@ -327,7 +327,7 @@ export function KalamiPage({ data }: { data: AppData }) {
 
   // Gravity vectors (dynamic from phone gyro tilt, reduced for floaty relaxed fall)
   const tiltGx = useRef(0);
-  const tiltGy = useRef(0.14);
+  const tiltGy = useRef(0.126);
   const lastWakeTime = useRef(0);
 
   const wakeUp = () => {
@@ -362,7 +362,7 @@ export function KalamiPage({ data }: { data: AppData }) {
         b.vx += gx;
         b.vy += gy;
         // Cap max downward falling velocity so drops remain floaty, soft and visible
-        if (b.vy > 2.4) b.vy = 2.4;
+        if (b.vy > 2.16) b.vy = 2.16;
         b.vx *= 0.982;
         b.vy *= 0.982;
         b.omega *= 0.94;
@@ -611,13 +611,13 @@ export function KalamiPage({ data }: { data: AppData }) {
         }
       } else {
         // Option C ceremony: slow sequential entry
-        const delayMs = 1100 + (i - newStartIndex) * 550;
+        const delayMs = 1200 + (i - newStartIndex) * 600;
         const hash = (i * 2654435761) >>> 0;
         balls.push({
           x: 130 + (((hash >>> 3) % 9) - 4) * 1.5,
           y: 30,
           vx: (((hash >>> 7) % 7) - 3) * 0.25,
-          vy: 0.45,
+          vy: 0.40,
           rot: (((hash >>> 11) % 25) - 12) * 2,
           omega: (((hash >>> 15) % 11) - 5) * 1.2,
           deform: 0.10,
@@ -649,7 +649,7 @@ export function KalamiPage({ data }: { data: AppData }) {
     if (hasNew) {
       corkHandledRef.current = false;
       const newCount = Math.max(1, inJar - newStartIndex);
-      ceremonyDeadlineRef.current = now + 1100 + newCount * 550 + 2600;
+      ceremonyDeadlineRef.current = now + 1200 + newCount * 600 + 2800;
 
       // Ensure cork begins closed and smoothly pops open after mounting paint
       setCorkState("closed");
@@ -692,8 +692,8 @@ export function KalamiPage({ data }: { data: AppData }) {
         if (Math.abs(gamma - lastGamma) > 1.2) {
           lastGamma = gamma;
           const rad = (gamma * Math.PI) / 180;
-          tiltGx.current = Math.sin(rad) * 0.16;
-          tiltGy.current = Math.cos(rad) * 0.16;
+          tiltGx.current = Math.sin(rad) * 0.144;
+          tiltGy.current = Math.cos(rad) * 0.144;
           wakeUp();
         }
       }
@@ -1010,7 +1010,8 @@ export function KalamiPage({ data }: { data: AppData }) {
               type="button"
               className="kalami-replay-btn"
               onClick={() => {
-                setDropFrom(Math.max(0, total - 1));
+                ballsRef.current = [];
+                setDropFrom(jarStart);
               }}
             >
               重播掉落

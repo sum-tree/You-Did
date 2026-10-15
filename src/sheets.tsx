@@ -197,10 +197,22 @@ export function TaskMenuSheet({
                     notify("只能撤销今天完成的任务。");
                     return;
                   }
-                  const result = await update(
-                    (previous) => uncompleteTask(previous, task.id, date),
-                    base,
-                  );
+                  const result = await update((previous) => {
+                    const undone = uncompleteTask(previous, task.id, date);
+                    const currentDaily =
+                      undone.daily[date] ??
+                      dailyTasks(previous, date).map((t) => t.id);
+                    const nextDaily = currentDaily.includes(task.id)
+                      ? currentDaily
+                      : [task.id, ...currentDaily];
+                    return {
+                      ...undone,
+                      daily: {
+                        ...undone.daily,
+                        [date]: nextDaily,
+                      },
+                    };
+                  }, base);
                   if (!result) return;
                   const taken =
                     balance(base.data) - balance(result.snapshot.data);
