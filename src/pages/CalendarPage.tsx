@@ -146,11 +146,11 @@ export function CalendarPage({
         ).map((date) => {
           const items = itemsByDate.get(date) ?? [];
           const count = items.length;
-          // Optimized for iPhone mobile viewport: 5 rows max per cell.
-          // If > 5 items, show first 4 items and display +N on the bottom-most row.
-          const hasOverflow = count > 5;
-          const displayItems = hasOverflow ? items.slice(0, 4) : items;
-          const moreCount = hasOverflow ? count - 4 : 0;
+          // Narrowed by one row height: 4 rows max per cell.
+          // If > 4 items, show first 3 items and display +N on the bottom-most row.
+          const hasOverflow = count > 4;
+          const displayItems = hasOverflow ? items.slice(0, 3) : items;
+          const moreCount = hasOverflow ? count - 3 : 0;
 
           return (
             <button
