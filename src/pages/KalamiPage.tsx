@@ -106,12 +106,28 @@ function restingSlot(index: number) {
   };
 }
 
-function constrainJarPhysics(p: { x: number; y: number; vx: number; vy: number; rot: number; omega: number }) {
-  const e = 0.32; // bouncy restitution
+interface BallPhysics {
+  x: number;
+  y: number;
+  vx: number;
+  vy: number;
+  rot: number;
+  omega: number;
+  deform: number;      // Squash (<0) / Stretch (>0) deformation amplitude
+  vDeform: number;     // Elastic spring deformation velocity
+  deformAngle: number; // Deformation axis in world degrees (e.g. 90 = vertical squash)
+  color: (typeof COLORS)[number];
+  active: boolean;
+  spawnTime: number;
+}
+
+function constrainJarPhysics(p: BallPhysics) {
+  const e = 0.28; // Soft jelly restitution
   // 1. Floor
   if (p.y >= FLOOR) {
     p.y = FLOOR;
     if (p.vy > 0) {
+      const impactSpeed = p.vy;
       if (p.vy < 0.35) {
         p.vy = 0;
       } else {
@@ -121,6 +137,12 @@ function constrainJarPhysics(p: { x: number; y: number; vx: number; vy: number; 
       p.omega *= 0.82;
       if (Math.abs(p.vx) > 0.08) {
         p.omega += (p.vx / R) * 1.5;
+      }
+      // Juicy vertical squash upon hitting floor (squash vertically, expand horizontally)
+      if (impactSpeed > 0.35) {
+        const impact = Math.min(1.0, impactSpeed / 4.2);
+        p.vDeform -= impact * 0.42;
+        p.deformAngle = 90;
       }
     }
   }
@@ -145,6 +167,11 @@ function constrainJarPhysics(p: { x: number; y: number; vx: number; vy: number; 
           if (Math.abs(vt) > 0.1) {
             p.omega += vt * 0.2;
           }
+          if (vn > 0.35) {
+            const impact = Math.min(1.0, vn / 4.2);
+            p.vDeform -= impact * 0.36;
+            p.deformAngle = Math.atan2(ny, nx) * (180 / Math.PI);
+          }
         }
       }
     } else if (p.y > 248 && p.x > 198) {
@@ -165,26 +192,43 @@ function constrainJarPhysics(p: { x: number; y: number; vx: number; vy: number; 
           if (Math.abs(vt) > 0.1) {
             p.omega += vt * 0.2;
           }
+          if (vn > 0.35) {
+            const impact = Math.min(1.0, vn / 4.2);
+            p.vDeform -= impact * 0.36;
+            p.deformAngle = Math.atan2(ny, nx) * (180 / Math.PI);
+          }
         }
       }
     } else {
       if (p.x < 32 + R) {
         p.x = 32 + R;
         if (p.vx < 0) {
+          const impactSpeed = -p.vx;
           p.vx = -p.vx * e;
           p.omega *= 0.85;
           if (Math.abs(p.vy) > 0.1) {
             p.omega -= (p.vy / R) * 1.5;
+          }
+          if (impactSpeed > 0.35) {
+            const impact = Math.min(1.0, impactSpeed / 4.2);
+            p.vDeform -= impact * 0.36;
+            p.deformAngle = 0; // Squashes horizontally, bulges vertically
           }
         }
       }
       if (p.x > 228 - R) {
         p.x = 228 - R;
         if (p.vx > 0) {
+          const impactSpeed = p.vx;
           p.vx = -p.vx * e;
           p.omega *= 0.85;
           if (Math.abs(p.vy) > 0.1) {
             p.omega += (p.vy / R) * 1.5;
+          }
+          if (impactSpeed > 0.35) {
+            const impact = Math.min(1.0, impactSpeed / 4.2);
+            p.vDeform -= impact * 0.36;
+            p.deformAngle = 0;
           }
         }
       }
@@ -196,17 +240,27 @@ function constrainJarPhysics(p: { x: number; y: number; vx: number; vy: number; 
     if (p.x < leftLimit) {
       p.x = leftLimit;
       if (p.vx < 0) {
+        const impactSpeed = -p.vx;
         p.vx = -p.vx * e;
         p.vy *= 0.85;
         p.omega *= 0.85;
+        if (impactSpeed > 0.35) {
+          p.vDeform -= Math.min(1.0, impactSpeed / 4.2) * 0.34;
+          p.deformAngle = 32;
+        }
       }
     }
     if (p.x > rightLimit) {
       p.x = rightLimit;
       if (p.vx > 0) {
+        const impactSpeed = p.vx;
         p.vx = -p.vx * e;
         p.vy *= 0.85;
         p.omega *= 0.85;
+        if (impactSpeed > 0.35) {
+          p.vDeform -= Math.min(1.0, impactSpeed / 4.2) * 0.34;
+          p.deformAngle = -32;
+        }
       }
     }
   } else {
@@ -226,18 +280,6 @@ function constrainJarPhysics(p: { x: number; y: number; vx: number; vy: number; 
       }
     }
   }
-}
-
-interface BallPhysics {
-  x: number;
-  y: number;
-  vx: number;
-  vy: number;
-  rot: number;
-  omega: number;
-  color: (typeof COLORS)[number];
-  active: boolean;
-  spawnTime: number;
 }
 
 function readSeen(): number | null {
@@ -326,7 +368,30 @@ export function KalamiPage({ data }: { data: AppData }) {
         b.omega *= 0.94;
 
         const speed = Math.hypot(b.vx, b.vy);
-        // Once linear speed is low, rapidly damp angular velocity so balls never spin in place
+
+        // Flight elongation: when falling fast, stretch along trajectory
+        if (speed > 1.2 && Math.abs(b.deform) < 0.1) {
+          const flightAngle = Math.atan2(b.vy, b.vx) * (180 / Math.PI);
+          const flightStretch = Math.min(0.18, (speed - 1.2) * 0.032);
+          b.deform = flightStretch;
+          b.deformAngle = flightAngle;
+        }
+
+        // Jelly harmonic damped spring: pulls deform back to 0 with juicy elasticity
+        const k = 0.22; // spring tension
+        const damping = 0.81; // jelly damping
+        b.vDeform += -k * b.deform;
+        b.vDeform *= damping;
+        b.deform += b.vDeform;
+
+        // Bounded deformation for cartoon appeal
+        b.deform = Math.max(-0.38, Math.min(0.28, b.deform));
+        if (Math.abs(b.deform) < 0.005 && Math.abs(b.vDeform) < 0.005) {
+          b.deform = 0;
+          b.vDeform = 0;
+        }
+
+        // Low speed damping for position & rotation
         if (speed < 0.25) {
           b.omega *= 0.82;
           if (Math.abs(b.omega) < 0.05) b.omega = 0;
@@ -341,10 +406,10 @@ export function KalamiPage({ data }: { data: AppData }) {
         b.rot += b.omega;
 
         constrainJarPhysics(b);
-        totalMotion += Math.hypot(b.vx, b.vy);
+        totalMotion += speed + Math.abs(b.vDeform) * 2;
       }
 
-      // 3. Circle-to-Circle Collision (3 relaxation iterations with Coulomb friction)
+      // 3. Circle-to-Circle Collision (3 relaxation iterations with Coulomb friction and jelly squish)
       for (let pass = 0; pass < 3; pass++) {
         for (let i = 0; i < balls.length; i++) {
           const b1 = balls[i];
@@ -371,12 +436,23 @@ export function KalamiPage({ data }: { data: AppData }) {
 
               const vrelN = (b2.vx - b1.vx) * nx + (b2.vy - b1.vy) * ny;
               if (vrelN < 0) {
-                const restitution = Math.abs(vrelN) < 0.35 ? 0 : 0.3;
+                const impactSpeed = -vrelN;
+                const restitution = impactSpeed < 0.35 ? 0 : 0.28;
                 const impulseN = -(1 + restitution) * vrelN * 0.5;
                 b1.vx -= nx * impulseN;
                 b1.vy -= ny * impulseN;
                 b2.vx += nx * impulseN;
                 b2.vy += ny * impulseN;
+
+                // Jelly deformation upon mutual impact!
+                if (impactSpeed > 0.35) {
+                  const impact = Math.min(1.0, impactSpeed / 4.2);
+                  const colAngle = Math.atan2(ny, nx) * (180 / Math.PI);
+                  b1.vDeform -= impact * 0.32;
+                  b1.deformAngle = colAngle;
+                  b2.vDeform -= impact * 0.32;
+                  b2.deformAngle = colAngle;
+                }
 
                 // Tangential rolling friction with Coulomb clamp
                 const tx = -ny;
@@ -403,15 +479,26 @@ export function KalamiPage({ data }: { data: AppData }) {
         }
       }
 
-      // 4. Update SVG DOM directly
+      // 4. Update SVG DOM directly with organic jelly squash & stretch
       balls.forEach((b, i) => {
         if (!b.active) return;
         const el = blobGroupRefs.current[i];
         if (el) {
-          el.setAttribute(
-            "transform",
-            `translate(${b.x.toFixed(1)} ${b.y.toFixed(1)}) rotate(${b.rot.toFixed(1)})`
-          );
+          if (Math.abs(b.deform) > 0.008) {
+            const sx = (1 + b.deform).toFixed(3);
+            const sy = (1 - b.deform * 0.82).toFixed(3);
+            const da = b.deformAngle.toFixed(1);
+            const innerRot = (b.rot - b.deformAngle).toFixed(1);
+            el.setAttribute(
+              "transform",
+              `translate(${b.x.toFixed(1)} ${b.y.toFixed(1)}) rotate(${da}) scale(${sx} ${sy}) rotate(${innerRot})`
+            );
+          } else {
+            el.setAttribute(
+              "transform",
+              `translate(${b.x.toFixed(1)} ${b.y.toFixed(1)}) rotate(${b.rot.toFixed(1)})`
+            );
+          }
         }
       });
 
@@ -472,6 +559,9 @@ export function KalamiPage({ data }: { data: AppData }) {
           vy: 0,
           rot: initial.turn,
           omega: 0,
+          deform: 0,
+          vDeform: 0,
+          deformAngle: 0,
           color: initial.color,
           active: true,
           spawnTime: 0,
@@ -487,6 +577,9 @@ export function KalamiPage({ data }: { data: AppData }) {
           vy: 1.2,
           rot: (((hash >>> 11) % 25) - 12) * 2,
           omega: (((hash >>> 15) % 11) - 5) * 1.2,
+          deform: 0.12,
+          vDeform: 0,
+          deformAngle: 90,
           color: getBalancedColor(i),
           active: false,
           spawnTime: now + delayMs,
@@ -555,7 +648,9 @@ export function KalamiPage({ data }: { data: AppData }) {
           ballsRef.current.forEach((b) => {
             b.vy -= Math.random() * 3.8 + 2.5;
             b.vx += (Math.random() - 0.5) * 3.5;
-            b.omega += (Math.random() - 0.5) * 22;
+            b.omega += (Math.random() - 0.5) * 18;
+            b.vDeform += (Math.random() - 0.5) * 0.38;
+            b.deformAngle = (Math.random() - 0.5) * 180;
           });
           wakeUp();
         }
@@ -576,11 +671,13 @@ export function KalamiPage({ data }: { data: AppData }) {
     setJarWobble(true);
     setTimeout(() => setJarWobble(false), 650);
 
-    // Upward explosive jolt
+    // Upward explosive jolt with soft jelly squish & wobble
     ballsRef.current.forEach((b) => {
       b.vy -= Math.random() * 4.2 + 3.2;
       b.vx += (Math.random() - 0.5) * 4.0;
-      b.omega += (Math.random() - 0.5) * 24;
+      b.omega += (Math.random() - 0.5) * 20;
+      b.vDeform += (Math.random() - 0.5) * 0.45;
+      b.deformAngle = (Math.random() - 0.5) * 180;
     });
 
     // Cork gives a playful pop & snaps back
@@ -754,6 +851,16 @@ export function KalamiPage({ data }: { data: AppData }) {
                   strokeWidth="0.65"
                   strokeLinejoin="round"
                   strokeLinecap="round"
+                />
+
+                {/* Subtle soft jelly translucent inner rim reflection */}
+                <path
+                  d="M -7, 6 C -3, 8.2, 3, 8.2, 7, 6"
+                  stroke="#ffffff"
+                  strokeWidth="0.85"
+                  strokeLinecap="round"
+                  opacity="0.32"
+                  fill="none"
                 />
               </g>
             );
