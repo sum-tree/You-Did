@@ -301,7 +301,7 @@ main {
   transform: translateX(-50%);
   width: min(390px, 100%);
   height: calc(76px + env(safe-area-inset-bottom));
-  padding: 8px 16px calc(8px + env(safe-area-inset-bottom));
+  padding: 8px 10px calc(8px + env(safe-area-inset-bottom));
   display: flex;
   justify-content: space-around;
   align-items: center;
@@ -314,15 +314,15 @@ main {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 4px;
-  font-size: 10px;
+  gap: 3px;
+  font-size: 11px;
   color: #929787;
-  min-width: 65px;
-  min-height: 52px;
+  min-width: 58px;
+  min-height: 50px;
 }
 .bottom-nav button > span {
-  width: 47px;
-  height: 30px;
+  width: 44px;
+  height: 28px;
   border-radius: 12px;
   display: grid;
   place-items: center;
@@ -333,6 +333,14 @@ main {
 }
 .bottom-nav button.active > span {
   background: #f4e5d2;
+}
+.bottom-nav button .kalami-active-bounce {
+  transform: scale(1.12);
+  transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+.coin-pill.active {
+  background: #f4e5d2;
+  border-color: #dfcbaf;
 }
 .reward-history {
   margin: 18px 0;
@@ -1090,38 +1098,6 @@ main {
     gap: 2px;
   }
 }
-.board-switch {
-  display: flex;
-  gap: 4px;
-  margin: 12px 22px 0;
-  padding: 4px;
-  border-radius: 12px;
-  background: #eeeee3;
-}
-.board-switch button {
-  flex: 1;
-  min-height: 36px;
-  border-radius: 9px;
-  font-size: 13px;
-  color: #8a8f7c;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  transition: all 0.15s ease;
-}
-.board-switch button.active {
-  background: #fffdf7;
-  box-shadow: 0 2px 5px #545c2512;
-  color: #4c5843;
-  font-weight: 650;
-}
-.board-switch button .kalami-icon {
-  transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
-}
-.board-switch button.active .kalami-icon {
-  transform: scale(1.15);
-}
 .page-actions {
   display: flex;
   align-items: center;
@@ -1337,9 +1313,16 @@ main {
   background: #fffefa;
 }
 @media (max-width: 350px) {
-  .board-switch {
-    margin-left: 16px;
-    margin-right: 16px;
+  .bottom-nav {
+    padding-left: 6px;
+    padding-right: 6px;
+  }
+  .bottom-nav button {
+    min-width: 46px;
+    font-size: 10px;
+  }
+  .bottom-nav button > span {
+    width: 38px;
   }
 }
 

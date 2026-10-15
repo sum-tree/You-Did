@@ -34,15 +34,13 @@ import { DailyPage } from "./pages/DailyPage.tsx";
 import { initialPoolView, PoolPage } from "./pages/PoolPage.tsx";
 import { KalamiPage } from "./pages/KalamiPage.tsx";
 
-// The task board has three tabs; the todo list ("pool") is reached from daily.
-type Page = "daily" | "achievement" | "pool" | "calendar";
-type Board = "task" | "kalami";
+// Bottom navigation tabs: 成就, 每日, 日历, 卡拉米; pool (待办) lives under daily.
+type Page = "achievement" | "daily" | "calendar" | "kalami" | "pool";
 
 export default function App() {
   const [settings, setSettings] = useState(false);
   const app = useAppStore(() => setSettings(true));
   const { snapshot, data, today, update, setToast } = app;
-  const [board, setBoard] = useState<Board>("task");
   const [page, setPage] = useState<Page>("daily");
   const [taskForm, setTaskForm, taskFormBase] = useDraft<Task | "new" | null>(
     snapshot,
@@ -129,15 +127,9 @@ export default function App() {
       : undefined,
   };
   const changePage = (next: Page) => {
-    setBoard("task");
     setPage(next);
     window.scrollTo({ top: 0, behavior: "instant" });
   };
-  const changeBoard = (next: Board) => {
-    setBoard(next);
-    window.scrollTo({ top: 0, behavior: "instant" });
-  };
-  const onTask = board === "task";
   return (
     <div className="app-shell">
       <header className="app-header">
@@ -156,14 +148,14 @@ export default function App() {
         </a>
         <div className="header-actions">
           <button
-            className="coin-pill"
+            className={`coin-pill ${page === "kalami" ? "active" : ""}`}
             aria-label={`卡拉米余额：${balance(data)}`}
-            onClick={() => changeBoard("kalami")}
+            onClick={() => changePage("kalami")}
           >
             <KalamiIcon size={18} />
             <strong>{balance(data)}</strong>
           </button>
-          {onTask && page === "achievement" && (
+          {(page === "achievement" || page === "kalami") && (
             <button
               className="icon-button"
               aria-label="设置与数据备份"
@@ -172,7 +164,7 @@ export default function App() {
               <Settings2 size={19} />
             </button>
           )}
-          {onTask && page === "daily" && (
+          {page === "daily" && (
             <button
               className="add-button"
               aria-label="添加任务"
@@ -181,7 +173,7 @@ export default function App() {
               <Plus size={20} />
             </button>
           )}
-          {onTask && page === "pool" && (
+          {page === "pool" && (
             <button
               className="add-button"
               aria-label="添加待办"
@@ -190,7 +182,7 @@ export default function App() {
               <Plus size={20} />
             </button>
           )}
-          {onTask && page === "calendar" && (
+          {page === "calendar" && (
             <button
               className="add-button"
               aria-label="添加提醒"
@@ -201,25 +193,6 @@ export default function App() {
           )}
         </div>
       </header>
-      <div className="board-switch" role="tablist" aria-label="板块">
-        <button
-          role="tab"
-          aria-selected={board === "task"}
-          className={board === "task" ? "active" : ""}
-          onClick={() => changeBoard("task")}
-        >
-          任务
-        </button>
-        <button
-          role="tab"
-          aria-selected={board === "kalami"}
-          className={`tab-kalami ${board === "kalami" ? "active" : ""}`}
-          onClick={() => changeBoard("kalami")}
-        >
-          <KalamiIcon size={16} />
-          <span>卡拉米</span>
-        </button>
-      </div>
       {(app.error || app.saveIssue || pendingBackup) && (
         <div className="storage-warning" role="alert">
           {app.error || app.saveIssue || "有一份待保存备份，可在设置中导出。"}
@@ -227,8 +200,7 @@ export default function App() {
         </div>
       )}
       <main>
-        {!onTask && <KalamiPage data={data} />}
-        {onTask && page === "daily" && (
+        {page === "daily" && (
           <DailyPage
             data={data}
             today={today}
@@ -243,10 +215,10 @@ export default function App() {
             onOpenSplit={(task) => setSplitTask(task)}
           />
         )}
-        {onTask && page === "achievement" && (
+        {page === "achievement" && (
           <AchievementPage data={data} today={today} />
         )}
-        {onTask && page === "pool" && (
+        {page === "pool" && (
           <PoolPage
             data={data}
             today={today}
@@ -257,7 +229,7 @@ export default function App() {
             onOpenSplit={(task) => setSplitTask(task)}
           />
         )}
-        {onTask && page === "calendar" && (
+        {page === "calendar" && (
           <CalendarPage
             events={data.events}
             today={today}
@@ -268,34 +240,58 @@ export default function App() {
             openDay={(date) => setDaySheet(date)}
           />
         )}
+        {page === "kalami" && <KalamiPage data={data} />}
       </main>
-      {onTask && (
-        <nav className="bottom-nav" aria-label="主要导航">
-          {(
-            [
-              ["achievement", "成就", Trophy],
-              ["daily", "每日", ListTodo],
-              ["calendar", "日历", CalendarDays],
-            ] as const
-          ).map(([key, label, Icon]) => {
-            // The todo list lives under daily, so daily stays highlighted there.
-            const active = page === key || (key === "daily" && page === "pool");
-            return (
-              <button
-                key={key}
-                aria-current={active ? "page" : undefined}
-                className={active ? "active" : ""}
-                onClick={() => changePage(key)}
-              >
-                <span>
-                  <Icon size={21} strokeWidth={active ? 2.2 : 1.7} />
-                </span>
-                {label}
-              </button>
-            );
-          })}
-        </nav>
-      )}
+      <nav className="bottom-nav" aria-label="主要导航">
+        {[
+          {
+            key: "achievement" as const,
+            label: "成就",
+            renderIcon: (active: boolean) => (
+              <Trophy size={21} strokeWidth={active ? 2.2 : 1.7} />
+            ),
+          },
+          {
+            key: "daily" as const,
+            label: "每日",
+            renderIcon: (active: boolean) => (
+              <ListTodo size={21} strokeWidth={active ? 2.2 : 1.7} />
+            ),
+          },
+          {
+            key: "calendar" as const,
+            label: "日历",
+            renderIcon: (active: boolean) => (
+              <CalendarDays size={21} strokeWidth={active ? 2.2 : 1.7} />
+            ),
+          },
+          {
+            key: "kalami" as const,
+            label: "卡拉米",
+            renderIcon: (active: boolean) => (
+              <KalamiIcon
+                size={21}
+                variant="red"
+                className={active ? "kalami-active-bounce" : ""}
+              />
+            ),
+          },
+        ].map(({ key, label, renderIcon }) => {
+          // The todo list lives under daily, so daily stays highlighted there.
+          const active = page === key || (key === "daily" && page === "pool");
+          return (
+            <button
+              key={key}
+              aria-current={active ? "page" : undefined}
+              className={active ? "active" : ""}
+              onClick={() => changePage(key)}
+            >
+              <span>{renderIcon(active)}</span>
+              {label}
+            </button>
+          );
+        })}
+      </nav>
       {app.toast && (
         <div className="toast" role="status">
           <KalamiIcon size={18} />

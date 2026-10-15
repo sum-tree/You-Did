@@ -455,8 +455,8 @@ export function buildInterviewSteps(questionCount: number): InterviewStep[] {
   titles.push(`记住所有回答（共${count}道）`);
   titles.push(
     "录一次视频",
-    "回看视频找问题",
-    "录第二次视频",
+    "回看视频，查找问题",
+    "再录一次视频",
     "再次回看",
     "录最终视频",
   );
