@@ -546,17 +546,24 @@ export function KalamiPage({ data }: { data: AppData }) {
 
       // 5. Ceremony & Cork Closure check
       const allActive = balls.every((b) => b.active);
-      // A ball is settled only if it is active, slow, and has descended into the lower jar/pile
-      const allLanded = balls.every((b, i) => {
-        if (!b.active) return false;
-        const speed = Math.hypot(b.vx, b.vy);
-        if (hasNew && i >= newStartIndex) {
-          // Newly dropped ball must have reached the resting area (y > 140)
-          return speed < 0.25 && b.y > 140;
-        }
-        return speed < 0.25;
-      });
-      const isCalm = allActive && allLanded;
+      const newBalls = hasNew ? balls.slice(newStartIndex) : [];
+      // Newly dropped balls must have descended past the neck/shoulder into jar body (y > 98) and settled
+      const newBallsLanded =
+        newBalls.length > 0 &&
+        newBalls.every(
+          (b) => b.active && b.y > 98 && Math.hypot(b.vx, b.vy) < 0.45
+        );
+      // Overall jar motion average
+      const avgMotion =
+        balls.length > 0
+          ? balls.reduce(
+              (sum, b) => sum + (b.active ? Math.hypot(b.vx, b.vy) : 0),
+              0
+            ) / balls.length
+          : 0;
+      const isCalm = hasNew
+        ? allActive && newBallsLanded && avgMotion < 0.32
+        : allActive && avgMotion < 0.15;
 
       if (isCalm) {
         calmFrames++;
@@ -566,7 +573,11 @@ export function KalamiPage({ data }: { data: AppData }) {
 
       // Reliable cork closure when all new balls are in and settled, or on deadline
       if (hasNew && !corkHandledRef.current && allActive) {
-        const canClose = (calmFrames >= 15 && allLanded) || (now >= ceremonyDeadlineRef.current && allLanded);
+        const canClose =
+          (calmFrames >= 12 && newBallsLanded) ||
+          (now >= ceremonyDeadlineRef.current &&
+            newBalls.every((b) => b.active && b.y > 98)) ||
+          now >= ceremonyDeadlineRef.current + 2500;
         if (canClose) {
           corkHandledRef.current = true;
           setCorkState("closing");
@@ -688,7 +699,7 @@ export function KalamiPage({ data }: { data: AppData }) {
     if (hasNew) {
       corkHandledRef.current = false;
       const newCount = Math.max(1, inJar - newStartIndex);
-      ceremonyDeadlineRef.current = now + 1200 + newCount * 600 + 2800;
+      ceremonyDeadlineRef.current = now + 1200 + newCount * 600 + 3500;
 
       // Ensure cork begins closed and smoothly pops open after mounting paint
       setCorkState("closed");
