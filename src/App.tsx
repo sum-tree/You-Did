@@ -281,9 +281,6 @@ export default function App() {
         {page === "calendar" && (
           <CalendarPage
             events={data.events}
-            tasks={data.tasks}
-            completions={data.completions}
-            daily={data.daily}
             today={today}
             month={month}
             setMonth={setMonth}
@@ -417,8 +414,6 @@ export default function App() {
           close={() => setDaySheet(null)}
           date={daySheet}
           events={data.events}
-          tasks={data.tasks}
-          completions={data.completions}
           base={daySheetBase.current}
           onEdit={(event, base) => {
             setEventForm(event, base);

@@ -1,14 +1,11 @@
 import { useMemo } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { addDays, dateObject, localDate, weekStart } from "../domain.ts";
-import type { CalendarEvent, Completion, Task } from "../domain.ts";
+import type { CalendarEvent } from "../domain.ts";
 import { longDate } from "../components.tsx";
 
 export function CalendarPage({
   events,
-  tasks = [],
-  completions = [],
-  daily,
   today,
   month,
   setMonth,
@@ -17,9 +14,6 @@ export function CalendarPage({
   openDay,
 }: {
   events: CalendarEvent[];
-  tasks?: Task[];
-  completions?: Completion[];
-  daily?: Record<string, string[]>;
   today: string;
   month: string;
   setMonth: (month: string) => void;
@@ -34,7 +28,7 @@ export function CalendarPage({
     setMonth(localDate(d));
   };
 
-  // Group items (events, tasks by dueDate/daily, completions) by date for calendar display
+  // Group items (calendar events) by date for calendar display
   const itemsByDate = useMemo(() => {
     const map = new Map<
       string,
@@ -58,7 +52,7 @@ export function CalendarPage({
       }
     };
 
-    // 1. Calendar events
+    // Calendar events (added in calendar page or from tasks with "add to calendar" checked)
     for (const event of events) {
       if (!event.date) continue;
       pushItem(event.date, {
@@ -68,48 +62,8 @@ export function CalendarPage({
       });
     }
 
-    // 2. Tasks with dueDate
-    for (const task of tasks) {
-      if (!task.dueDate) continue;
-      pushItem(task.dueDate, {
-        id: `task-${task.id}`,
-        title: task.title.trim(),
-        kind: task.kind === "interview" ? "interview" : task.category,
-        done: task.status === "done",
-      });
-    }
-
-    // 3. Tasks planned for specific days in daily
-    if (daily) {
-      for (const [day, taskIds] of Object.entries(daily)) {
-        if (!Array.isArray(taskIds)) continue;
-        for (const tid of taskIds) {
-          const t = tasks.find((item) => item.id === tid);
-          if (t) {
-            pushItem(day, {
-              id: `daily-${day}-${t.id}`,
-              title: t.title.trim(),
-              kind: t.kind === "interview" ? "interview" : t.category,
-              done: t.status === "done",
-            });
-          }
-        }
-      }
-    }
-
-    // 4. Completed tasks on that day
-    for (const c of completions) {
-      if (!c.date) continue;
-      pushItem(c.date, {
-        id: `comp-${c.taskId}`,
-        title: c.title.trim(),
-        kind: c.kind === "interview" ? "interview" : c.category,
-        done: true,
-      });
-    }
-
     return map;
-  }, [events, tasks, completions, daily]);
+  }, [events]);
 
   return (
     <section className="calendar-card">

@@ -230,11 +230,6 @@ export function Modal({
   const titleId = useId();
   useEffect(() => {
     ref.current?.showModal();
-    ref.current
-      ?.querySelector<HTMLInputElement>(
-        'input:not([type="checkbox"]),textarea,select',
-      )
-      ?.focus();
   }, []);
   return (
     <dialog
@@ -334,7 +329,6 @@ export function TaskForm({
           placeholder="例如：投递3份心仪的岗位"
           defaultValue={existing?.title}
           onInput={(e) => e.currentTarget.setCustomValidity("")}
-          autoFocus
         />
       </label>
       <label>
@@ -418,9 +412,9 @@ export function EventForm({
           id: existing?.id ?? crypto.randomUUID(),
           title,
           date: String(f.get("date")),
-          time: String(f.get("time")),
+          time: existing?.time ?? "",
           kind: String(f.get("kind")) as CalendarEvent["kind"],
-          note: String(f.get("note")).trim(),
+          note: existing?.note ?? "",
         });
       }}
     >
@@ -433,26 +427,19 @@ export function EventForm({
           placeholder="例如：公司面试 / 作业DDL"
           defaultValue={existing?.title}
           onInput={(e) => e.currentTarget.setCustomValidity("")}
-          autoFocus
         />
       </label>
-      <div className="form-row">
-        <label>
-          日期
-          <input
-            name="date"
-            type="date"
-            required
-            defaultValue={existing?.date ?? date}
-            min="1900-01-01"
-            max="2100-12-31"
-          />
-        </label>
-        <label>
-          时间（选填）
-          <input name="time" type="time" defaultValue={existing?.time} />
-        </label>
-      </div>
+      <label>
+        日期
+        <input
+          name="date"
+          type="date"
+          required
+          defaultValue={existing?.date ?? date}
+          min="1900-01-01"
+          max="2100-12-31"
+        />
+      </label>
       <label>
         事项类型
         <select name="kind" defaultValue={existing?.kind ?? "reminder"}>
@@ -460,16 +447,6 @@ export function EventForm({
           <option value="deadline">重要截止日期</option>
           <option value="reminder">提醒事项</option>
         </select>
-      </label>
-      <label>
-        备注
-        <textarea
-          name="note"
-          maxLength={1000}
-          rows={3}
-          placeholder="地点、准备事项……"
-          defaultValue={existing?.note}
-        />
       </label>
       <p className="form-note">日历事项用于提醒，不自动计入任务或发放积分。</p>
       <button className="primary" type="submit">
