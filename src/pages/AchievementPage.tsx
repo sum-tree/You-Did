@@ -1,5 +1,5 @@
 import { ChevronRight } from "lucide-react";
-import { addDays, balance, weekStart, weekStats } from "../domain.ts";
+import { addDays, balance, monthBalance, weekStart, weekStats } from "../domain.ts";
 import type { AppData } from "../domain.ts";
 import { categoryIcon, KalamiIcon, Progress, shortDate } from "../components.tsx";
 
@@ -12,6 +12,9 @@ export function AchievementPage({
 }) {
   const week = weekStart(today);
   const stats = weekStats(data, week);
+  const currentMonth = today.slice(0, 7);
+  const monthTotal = monthBalance(data, currentMonth);
+  const totalBalance = balance(data);
   return (
     <>
       <p className="week-range">
@@ -21,7 +24,10 @@ export function AchievementPage({
         <summary>
           <KalamiIcon size={18} />
           我的卡拉米
-          <strong>{balance(data)}</strong>
+          <span className="balance-summary-values">
+            <strong>{monthTotal}</strong>
+            <small>/ 累计 {totalBalance}</small>
+          </span>
           <ChevronRight size={16} />
         </summary>
         {data.rewards.length === 0 ? (

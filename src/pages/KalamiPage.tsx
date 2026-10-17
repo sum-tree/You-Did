@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
-import { balance } from "../domain.ts";
+import { ChevronLeft, ChevronRight } from "lucide-react";
+import { balance, localDate, monthBalance, yearlyMonthsStats } from "../domain.ts";
 import type { AppData } from "../domain.ts";
 import { KalamiIcon, shortDate } from "../components.tsx";
 import { playCorkPop, playCorkThump, playJarBounce, playJellyDrop } from "../audio.ts";
@@ -295,18 +296,20 @@ function constrainJarPhysics(p: BallPhysics) {
   }
 }
 
-function readSeen(): number | null {
+function readSeen(month: string): number | null {
   try {
-    const value = window.localStorage.getItem(SEEN_KEY);
-    return value === null ? null : Number(value);
+    const value = window.localStorage.getItem(`${SEEN_KEY}:${month}`);
+    if (value !== null) return Number(value);
+    const legacy = window.localStorage.getItem(SEEN_KEY);
+    return legacy === null ? null : Number(legacy);
   } catch {
     return null;
   }
 }
 
-function writeSeen(value: number) {
+function writeSeen(month: string, value: number) {
   try {
-    window.localStorage.setItem(SEEN_KEY, String(value));
+    window.localStorage.setItem(`${SEEN_KEY}:${month}`, String(value));
   } catch {
     // Convenience only
   }
@@ -316,20 +319,37 @@ function writeSeen(value: number) {
 // keep it active across all tab navigations without re-prompting!
 let sessionGyroGranted = false;
 
-export function KalamiPage({ data }: { data: AppData }) {
-  const total = balance(data);
+export function KalamiPage({
+  data,
+  today = localDate(),
+}: {
+  data: AppData;
+  today?: string;
+}) {
+  const currentMonth = today.slice(0, 7);
+  const currentYear = Number(today.slice(0, 4));
+
+  const [browsingYear, setBrowsingYear] = useState(() => currentYear);
+  const [selectedMonth, setSelectedMonth] = useState(() => currentMonth);
+
+  const isBrowsingHistory = selectedMonth !== currentMonth;
+  const selectedYear = selectedMonth.slice(0, 4);
+  const selectedMonthNum = Number(selectedMonth.slice(5, 7));
+
+  const total = monthBalance(data, selectedMonth);
+  const totalBalance = balance(data);
   const fullJars = total > 0 ? Math.floor((total - 1) / JAR_SIZE) : 0;
   const inJar = total - fullJars * JAR_SIZE;
   const jarStart = fullJars * JAR_SIZE;
 
-  // Determine newly earned kalami since last viewed
+  // Determine newly earned kalami since last viewed (only for current month)
   const [dropFrom, setDropFrom] = useState(() => {
-    const seen = readSeen();
+    const seen = readSeen(currentMonth);
     return seen === null || seen >= total ? total : seen;
   });
   const [replaySeed, setReplaySeed] = useState(0);
 
-  const hasNew = jarStart + inJar > dropFrom && dropFrom < total;
+  const hasNew = !isBrowsingHistory && (jarStart + inJar > dropFrom && dropFrom < total);
   const newStartIndex = Math.max(0, dropFrom - jarStart);
 
   const [corkState, setCorkState] = useState<"closed" | "popped" | "closing">("closed");
@@ -345,6 +365,7 @@ export function KalamiPage({ data }: { data: AppData }) {
   const hasNewRef = useRef(hasNew);
   const newStartIndexRef = useRef(newStartIndex);
   const totalRef = useRef(total);
+  const renderedMonthRef = useRef<string>(selectedMonth);
   hasNewRef.current = hasNew;
   newStartIndexRef.current = newStartIndex;
   totalRef.current = total;
@@ -358,7 +379,7 @@ export function KalamiPage({ data }: { data: AppData }) {
       setJarThump(true);
       playCorkThump();
       setTimeout(() => setJarThump(false), 350);
-      writeSeen(totalRef.current);
+      writeSeen(currentMonth, totalRef.current);
       setDropFrom(totalRef.current);
     }, 650);
   };
@@ -617,10 +638,15 @@ export function KalamiPage({ data }: { data: AppData }) {
 
   // Initialize or re-initialize balls
   useEffect(() => {
+    const isSameMonth = renderedMonthRef.current === selectedMonth;
+    renderedMonthRef.current = selectedMonth;
+
     // If balls are already simulated in the jar and there are no new drops, preserve their exact positions!
-    if (ballsRef.current.length === inJar && !hasNew) {
-      corkHandledRef.current = true;
-      writeSeen(total);
+    if (isSameMonth && ballsRef.current.length === inJar && !hasNew) {
+      if (!isBrowsingHistory) {
+        corkHandledRef.current = true;
+        writeSeen(currentMonth, total);
+      }
       // Ensure any remaining motion finishes smoothly and doesn't freeze in mid-air
       const isStillMoving = ballsRef.current.some(
         (b) => Math.hypot(b.vx, b.vy) > 0.05 || Math.abs(b.vDeform) > 0.02
@@ -631,6 +657,12 @@ export function KalamiPage({ data }: { data: AppData }) {
       return;
     }
 
+    if (rafId.current) {
+      cancelAnimationFrame(rafId.current);
+      rafId.current = null;
+    }
+    isSimulatingRef.current = false;
+
     const balls: BallPhysics[] = [];
     const now = Date.now();
 
@@ -639,8 +671,8 @@ export function KalamiPage({ data }: { data: AppData }) {
       const isNew = hasNew && i >= newStartIndex;
 
       if (!isNew) {
-        // Reuse existing physical coordinates if already simulated; otherwise use restingSlot
-        const existing = ballsRef.current[i];
+        // Reuse existing physical coordinates if same month and already simulated; otherwise use restingSlot
+        const existing = isSameMonth ? ballsRef.current[i] : undefined;
         if (existing) {
           balls.push({
             ...existing,
@@ -714,13 +746,6 @@ export function KalamiPage({ data }: { data: AppData }) {
       // Deadline: 1200ms initial pop + stagger entry delay + 2200ms settling
       ceremonyDeadlineRef.current = now + 1200 + newCount * 600 + 2200;
 
-      // Reset any previous physics frame so new drop starts clean
-      if (rafId.current) {
-        cancelAnimationFrame(rafId.current);
-        rafId.current = null;
-      }
-      isSimulatingRef.current = false;
-
       // Ensure cork begins closed and smoothly pops open after mounting paint
       setCorkState("closed");
       const openTimer = window.setTimeout(() => {
@@ -740,24 +765,27 @@ export function KalamiPage({ data }: { data: AppData }) {
         clearTimeout(safetyCloseTimer);
         if (rafId.current) cancelAnimationFrame(rafId.current);
         isSimulatingRef.current = false;
-        if (hasNewRef.current) {
-          writeSeen(totalRef.current);
+        if (hasNewRef.current && !isBrowsingHistory) {
+          writeSeen(currentMonth, totalRef.current);
         }
       };
     } else {
       corkHandledRef.current = true;
+      setCorkState("closed");
       isSimulatingRef.current = false;
-      writeSeen(total);
+      if (!isBrowsingHistory) {
+        writeSeen(currentMonth, total);
+      }
     }
 
     return () => {
       if (rafId.current) cancelAnimationFrame(rafId.current);
       isSimulatingRef.current = false;
-      if (hasNewRef.current) {
-        writeSeen(totalRef.current);
+      if (hasNewRef.current && !isBrowsingHistory) {
+        writeSeen(currentMonth, totalRef.current);
       }
     };
-  }, [inJar, total, dropFrom, jarStart, hasNew, newStartIndex, replaySeed]);
+  }, [inJar, total, dropFrom, jarStart, hasNew, newStartIndex, replaySeed, selectedMonth]);
 
   // iOS DeviceOrientation permission handling
   const isIOS =
@@ -902,8 +930,9 @@ export function KalamiPage({ data }: { data: AppData }) {
   };
 
   const handleReplay = () => {
-    if (hasNew || corkState !== "closed") return;
-    const lastReward = data.rewards[data.rewards.length - 1];
+    if (isBrowsingHistory || hasNew || corkState !== "closed") return;
+    const monthRewards = data.rewards.filter((r) => r.date.slice(0, 7) === currentMonth);
+    const lastReward = monthRewards[monthRewards.length - 1];
     const lastBatchCount = lastReward
       ? Math.max(1, Math.min(inJar, lastReward.amount))
       : Math.min(inJar, 1);
@@ -927,11 +956,32 @@ export function KalamiPage({ data }: { data: AppData }) {
 
   return (
     <section className="kalami-page">
+      {isBrowsingHistory && (
+        <div className="kalami-history-banner">
+          <span className="kalami-history-banner-text">
+            📅 回看 {selectedYear}年{selectedMonthNum}月
+          </span>
+          <button
+            type="button"
+            className="return-current-btn"
+            onClick={() => {
+              setSelectedMonth(currentMonth);
+              setBrowsingYear(currentYear);
+            }}
+          >
+            返回本月
+          </button>
+        </div>
+      )}
+
       <div className="kalami-total">
         <KalamiIcon size={28} />
         <strong>{total}</strong>
         <span>颗卡拉米</span>
       </div>
+      <p className="kalami-sub-balance">
+        {isBrowsingHistory ? `${selectedYear}年${selectedMonthNum}月收集` : "本月收集"} · 累计 <strong>{totalBalance}</strong>
+      </p>
 
       <svg
         className={`kalami-jar ${jarWobble ? "wobbling" : ""} ${jarThump ? "thump" : ""}`}
@@ -1174,7 +1224,11 @@ export function KalamiPage({ data }: { data: AppData }) {
       )}
 
       {total === 0 ? (
-        <p className="kalami-empty">完成任务后，圆滚滚的果冻卡拉米会掉进罐子里哦。</p>
+        <p className="kalami-empty">
+          {isBrowsingHistory
+            ? "该月未收集卡拉米～"
+            : "完成任务后，圆滚滚的果冻卡拉米会掉进罐子里哦。"}
+        </p>
       ) : (
         <p className="kalami-hint">
           点击玻璃罐可以颠球，倾斜手机可滚动它们哦～
@@ -1201,7 +1255,7 @@ export function KalamiPage({ data }: { data: AppData }) {
           {gyroPermState === "denied" && isIOS && (
             <span className="kalami-gyro-denied">⚠️ 陀螺仪未授权（可刷新并在弹窗中允许）</span>
           )}
-          {inJar > 0 && (
+          {!isBrowsingHistory && inJar > 0 && (
             <button
               type="button"
               className="kalami-replay-btn"
@@ -1215,25 +1269,99 @@ export function KalamiPage({ data }: { data: AppData }) {
         </p>
       )}
 
-      <h2 className="section-title">获得记录</h2>
-      <div className="reward-history kalami-history">
-        {data.rewards.length === 0 ? (
-          <p>暂无记录。</p>
-        ) : (
-          data.rewards
-            .slice()
-            .reverse()
-            .map((reward) => (
-              <div key={reward.id}>
-                <span>
-                  {reward.label}
-                  <small>{shortDate(reward.date)}</small>
-                </span>
-                <strong>+{reward.amount}</strong>
-              </div>
-            ))
-        )}
+      {/* 12-Month Yearly Collection Matrix */}
+      <div className="yearly-stats-section">
+        <div className="yearly-stats-header">
+          <h2 className="section-title">年度收集</h2>
+          <div className="year-selector">
+            <button
+              type="button"
+              className="year-nav-btn"
+              onClick={() => setBrowsingYear((y) => y - 1)}
+              aria-label="前一年"
+            >
+              <ChevronLeft size={16} />
+            </button>
+            <span className="year-display">{browsingYear}年</span>
+            <button
+              type="button"
+              className="year-nav-btn"
+              onClick={() => setBrowsingYear((y) => y + 1)}
+              aria-label="后一年"
+            >
+              <ChevronRight size={16} />
+            </button>
+          </div>
+        </div>
+        <div className="months-grid">
+          {yearlyMonthsStats(data, browsingYear).map((stat) => {
+            const isCurrent = stat.month === currentMonth;
+            const isSelected = stat.month === selectedMonth;
+            const isFuture = stat.month > currentMonth;
+            return (
+              <button
+                key={stat.month}
+                type="button"
+                className={`month-card ${isSelected ? "selected" : ""} ${isCurrent ? "current" : ""} ${isFuture ? "future" : ""}`}
+                onClick={() => setSelectedMonth(stat.month)}
+                aria-label={`${stat.monthNumber}月，收集${stat.total}颗${stat.fullJars ? `，满${stat.fullJars}罐` : ""}`}
+              >
+                <div className="month-card-header">
+                  <span className="month-card-name">{stat.monthNumber}月</span>
+                  {isCurrent && <span className="month-current-pill">本月</span>}
+                </div>
+                <div className="month-card-body">
+                  <strong className="month-card-total">
+                    {isFuture && stat.total === 0 ? "—" : stat.total}
+                  </strong>
+                  {stat.fullJars > 0 && (
+                    <span className="month-card-badge" title={`已装满 ${stat.fullJars} 罐`}>
+                      🏺×{stat.fullJars}
+                    </span>
+                  )}
+                </div>
+              </button>
+            );
+          })}
+        </div>
       </div>
+
+      {/* Monthly History Section */}
+      {(() => {
+        const monthRewards = data.rewards.filter((r) => r.date.slice(0, 7) === selectedMonth);
+        return (
+          <>
+            <div className="section-heading kalami-history-heading">
+              <h2 className="section-title">
+                {isBrowsingHistory ? `${selectedYear}年${selectedMonthNum}月获得记录` : "本月获得记录"}
+              </h2>
+              {monthRewards.length > 0 && (
+                <small className="kalami-history-count">
+                  共 {monthRewards.length} 笔 · +{total} 卡拉米
+                </small>
+              )}
+            </div>
+            <div className="reward-history kalami-history">
+              {monthRewards.length === 0 ? (
+                <p>{isBrowsingHistory ? "该月暂无卡拉米记录。" : "本月暂无卡拉米记录。"}</p>
+              ) : (
+                monthRewards
+                  .slice()
+                  .reverse()
+                  .map((reward) => (
+                    <div key={reward.id}>
+                      <span>
+                        {reward.label}
+                        <small>{shortDate(reward.date)}</small>
+                      </span>
+                      <strong>+{reward.amount}</strong>
+                    </div>
+                  ))
+              )}
+            </div>
+          </>
+        );
+      })()}
     </section>
   );
 }

@@ -16,6 +16,7 @@ import {
   inferContribution,
   interviewRewardInfo,
   localDate,
+  monthBalance,
   moveTasks,
   normalizeData,
   saveTask,
@@ -29,6 +30,7 @@ import {
   validDate,
   weekStart,
   weekStats,
+  yearlyMonthsStats,
 } from "../src/domain.ts";
 
 const day = "2026-10-12";
@@ -883,4 +885,78 @@ test("tasks with steps survive validateData and normalizeData", () => {
   assert.equal(validateData(normalized), true);
   assert.equal(normalized.tasks[0].steps.length, 10);
 });
+
+test("monthBalance accurately computes balance strictly for a given month", () => {
+  const data = {
+    ...emptyData(),
+    rewards: [
+      { id: "r1", amount: 10, label: "任务1", date: "2026-09-30", week: "2026-09-28" },
+      { id: "r2", amount: 25, label: "任务2", date: "2026-10-01", week: "2026-09-28" },
+      { id: "r3", amount: 20, label: "任务3", date: "2026-10-15", week: "2026-10-12" },
+      { id: "r4", amount: 15, label: "任务4", date: "2026-11-02", week: "2026-11-02" },
+    ],
+  };
+
+  assert.equal(monthBalance(data, "2026-09"), 10);
+  assert.equal(monthBalance(data, "2026-10"), 45);
+  assert.equal(monthBalance(data, "2026-11"), 15);
+  assert.equal(monthBalance(data, "2026-12"), 0);
+  assert.equal(balance(data), 70);
+});
+
+test("yearlyMonthsStats returns 12 months with correct totals, fullJars, and remCoins", () => {
+  const data = {
+    ...emptyData(),
+    rewards: [
+      { id: "r1", amount: 45, label: "1月", date: "2026-01-10", week: "2026-01-05" },
+      { id: "r2", amount: 120, label: "3月满罐", date: "2026-03-12", week: "2026-03-09" },
+      { id: "r3", amount: 205, label: "5月两罐", date: "2026-05-18", week: "2026-05-18" },
+      { id: "r4", amount: 50, label: "2025年奖励", date: "2025-05-18", week: "2025-05-18" },
+    ],
+  };
+
+  const stats2026 = yearlyMonthsStats(data, 2026);
+  assert.equal(stats2026.length, 12);
+
+  // Jan: 45 coins, 0 full jars
+  assert.deepEqual(stats2026[0], {
+    month: "2026-01",
+    monthNumber: 1,
+    total: 45,
+    fullJars: 0,
+    remCoins: 45,
+  });
+
+  // Feb: 0 coins
+  assert.deepEqual(stats2026[1], {
+    month: "2026-02",
+    monthNumber: 2,
+    total: 0,
+    fullJars: 0,
+    remCoins: 0,
+  });
+
+  // Mar: 120 coins, 1 full jar, 20 rem
+  assert.deepEqual(stats2026[2], {
+    month: "2026-03",
+    monthNumber: 3,
+    total: 120,
+    fullJars: 1,
+    remCoins: 20,
+  });
+
+  // May: 205 coins, 2 full jars, 5 rem
+  assert.deepEqual(stats2026[4], {
+    month: "2026-05",
+    monthNumber: 5,
+    total: 205,
+    fullJars: 2,
+    remCoins: 5,
+  });
+
+  // 2025 reward was not counted in 2026
+  const stats2025 = yearlyMonthsStats(data, 2025);
+  assert.equal(stats2025[4].total, 50);
+});
+
 

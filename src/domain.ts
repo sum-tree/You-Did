@@ -218,6 +218,40 @@ export function emptyData(): AppData {
 export function balance(data: AppData): number {
   return data.rewards.reduce((total, reward) => total + reward.amount, 0);
 }
+export function monthBalance(data: AppData, month: string): number {
+  return data.rewards
+    .filter((reward) => reward.date.slice(0, 7) === month)
+    .reduce((total, reward) => total + reward.amount, 0);
+}
+export interface MonthStat {
+  month: string;
+  monthNumber: number;
+  total: number;
+  fullJars: number;
+  remCoins: number;
+}
+export function yearlyMonthsStats(data: AppData, year: number): MonthStat[] {
+  const yearPrefix = `${year}-`;
+  const monthlyTotals = new Map<string, number>();
+  for (const reward of data.rewards) {
+    if (reward.date.startsWith(yearPrefix)) {
+      const month = reward.date.slice(0, 7);
+      monthlyTotals.set(month, (monthlyTotals.get(month) ?? 0) + reward.amount);
+    }
+  }
+  return Array.from({ length: 12 }, (_, i) => {
+    const monthNumber = i + 1;
+    const month = `${year}-${String(monthNumber).padStart(2, "0")}`;
+    const total = monthlyTotals.get(month) ?? 0;
+    return {
+      month,
+      monthNumber,
+      total,
+      fullJars: Math.floor(total / 100),
+      remCoins: total % 100,
+    };
+  });
+}
 function ratio(value: number, target: number): number {
   return target === 0 ? 1 : Math.min(1, value / target);
 }

@@ -167,6 +167,12 @@ svg {
   font-weight: 750;
   color: var(--ink);
 }
+.coin-pill-sub {
+  font-size: 11px;
+  color: #8c8f7d;
+  font-weight: 500;
+  margin-left: 1px;
+}
 main {
   padding: 24px 22px 8px;
 }
@@ -1135,11 +1141,24 @@ main {
 .balance-panel summary::-webkit-details-marker {
   display: none;
 }
-.balance-panel summary > strong {
+.balance-panel summary > strong,
+.balance-panel summary > .balance-summary-values {
   margin-left: auto;
-  font-size: 18px;
+}
+.balance-summary-values {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
+}
+.balance-summary-values strong {
+  font-size: 17px;
   font-weight: 700;
   color: var(--ink);
+}
+.balance-summary-values small {
+  font-size: 12px;
+  color: #8c8f7d;
+  font-weight: 500;
 }
 .balance-panel summary > svg:last-child {
   margin-left: 4px;
@@ -1341,6 +1360,40 @@ main {
   flex-direction: column;
   align-items: center;
 }
+.kalami-history-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  align-self: stretch;
+  padding: 8px 12px;
+  margin-bottom: 12px;
+  background: #fdf6ec;
+  border: 1px solid #faecd8;
+  border-radius: 10px;
+  color: #8c6a38;
+  font-size: 12px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.02);
+}
+.kalami-history-banner-text {
+  font-weight: 600;
+}
+.return-current-btn {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 10px;
+  background: #fff;
+  border: 1px solid #ebd4b8;
+  border-radius: 6px;
+  color: #8c6a38;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.return-current-btn:hover {
+  background: #fdfbf7;
+  border-color: #dfbe9b;
+}
 .kalami-total {
   display: flex;
   align-items: center;
@@ -1353,6 +1406,16 @@ main {
   font-weight: 750;
   color: var(--ink);
   letter-spacing: -1px;
+}
+.kalami-sub-balance {
+  font-size: 12px;
+  color: #8c8f7d;
+  margin-top: 3px;
+  margin-bottom: 6px;
+}
+.kalami-sub-balance strong {
+  color: #5d614e;
+  font-weight: 650;
 }
 .kalami-jar {
   width: min(280px, 86%);
@@ -1558,9 +1621,129 @@ main {
   font-size: 11px;
   color: #c04c40;
 }
-.kalami-page .section-title {
+.yearly-stats-section {
   align-self: stretch;
-  margin-top: 18px;
+  margin-top: 20px;
+}
+.yearly-stats-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+.year-selector {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  background: #f1eee4;
+  border: 1px solid #e3decb;
+  border-radius: 8px;
+  padding: 2px 4px;
+}
+.year-nav-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: none;
+  color: #6e7562;
+  padding: 3px;
+  border-radius: 5px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.year-nav-btn:hover {
+  background: #e5e0cf;
+  color: var(--ink);
+}
+.year-display {
+  font-size: 12px;
+  font-weight: 650;
+  color: var(--ink);
+  min-width: 44px;
+  text-align: center;
+}
+.months-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 7px;
+}
+.month-card {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  background: #fffefa;
+  border: 1px solid #e7e8db;
+  border-radius: 10px;
+  padding: 8px 7px;
+  min-height: 56px;
+  text-align: left;
+  cursor: pointer;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.02);
+  transition: all 0.15s ease;
+}
+.month-card:hover {
+  border-color: #cbd4be;
+  background: #fbfbf6;
+}
+.month-card.selected {
+  border-color: #8d9c72;
+  background: #f4f6ee;
+  box-shadow: 0 0 0 1.5px #8d9c72;
+}
+.month-card.current {
+  border-color: #b8c4a4;
+}
+.month-card.future {
+  opacity: 0.55;
+}
+.month-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 2px;
+}
+.month-card-name {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: #5d6350;
+}
+.month-current-pill {
+  font-size: 8.5px;
+  line-height: 1;
+  padding: 1.5px 3.5px;
+  background: #8d9c72;
+  color: #fff;
+  border-radius: 4px;
+  font-weight: 600;
+}
+.month-card-body {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 2px;
+  margin-top: 4px;
+}
+.month-card-total {
+  font-size: 13.5px;
+  font-weight: 750;
+  color: var(--ink);
+}
+.month-card-badge {
+  font-size: 9px;
+  color: #9a6d36;
+  font-weight: 700;
+  letter-spacing: -0.2px;
+  white-space: nowrap;
+}
+.kalami-history-heading {
+  align-self: stretch;
+  margin-top: 22px;
+  margin-bottom: 6px;
+}
+.kalami-history-count {
+  font-size: 11px;
+  color: #8c8f7d;
 }
 .reward-history.kalami-history {
   align-self: stretch;

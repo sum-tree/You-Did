@@ -13,6 +13,7 @@ import {
   completeTask,
   dailyTasks,
   localDate,
+  monthBalance,
   saveTask,
   schedulable,
   toggleInterviewStep,
@@ -198,11 +199,12 @@ export default function App() {
         <div className="header-actions">
           <button
             className={`coin-pill ${page === "kalami" ? "active" : ""}`}
-            aria-label={`卡拉米余额：${balance(data)}`}
+            aria-label={`卡拉米：本月 ${monthBalance(data, today.slice(0, 7))}，累计 ${balance(data)}`}
             onClick={() => changePage("kalami")}
           >
             <KalamiIcon size={18} />
-            <strong>{balance(data)}</strong>
+            <strong>{monthBalance(data, today.slice(0, 7))}</strong>
+            <span className="coin-pill-sub">/ 累计 {balance(data)}</span>
           </button>
           {(page === "achievement" || page === "kalami") && (
             <button
@@ -289,7 +291,7 @@ export default function App() {
             openDay={(date) => setDaySheet(date)}
           />
         )}
-        {page === "kalami" && <KalamiPage data={data} />}
+        {page === "kalami" && <KalamiPage data={data} today={today} />}
       </main>
       <nav className="bottom-nav" aria-label="主要导航">
         {[
