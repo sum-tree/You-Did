@@ -252,6 +252,39 @@ export function yearlyMonthsStats(data: AppData, year: number): MonthStat[] {
     };
   });
 }
+
+export function getStartMonth(data: AppData): string {
+  let earliest: string | null = null;
+  const consider = (dateStr?: string) => {
+    if (!dateStr) return;
+    const ym = dateStr.slice(0, 7);
+    if (/^\d{4}-\d{2}$/.test(ym)) {
+      if (!earliest || ym < earliest) {
+        earliest = ym;
+      }
+    }
+  };
+  for (const r of data.rewards) consider(r.date);
+  for (const c of data.completions) consider(c.date);
+  for (const t of data.tasks) consider(t.createdAt);
+  return earliest ?? "2026-10";
+}
+
+export function visibleYearlyMonthsStats(data: AppData, year: number): MonthStat[] {
+  const startMonth = getStartMonth(data);
+  const startYear = Number(startMonth.slice(0, 4));
+  const startMonthNum = Number(startMonth.slice(5, 7));
+  const allMonths = yearlyMonthsStats(data, year);
+
+  if (year < startYear) {
+    return [];
+  }
+  if (year === startYear) {
+    return allMonths.filter((stat) => stat.monthNumber >= startMonthNum);
+  }
+  return allMonths;
+}
+
 function ratio(value: number, target: number): number {
   return target === 0 ? 1 : Math.min(1, value / target);
 }

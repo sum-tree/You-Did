@@ -31,6 +31,8 @@ import {
   weekStart,
   weekStats,
   yearlyMonthsStats,
+  getStartMonth,
+  visibleYearlyMonthsStats,
 } from "../src/domain.ts";
 
 const day = "2026-10-12";
@@ -958,5 +960,37 @@ test("yearlyMonthsStats returns 12 months with correct totals, fullJars, and rem
   const stats2025 = yearlyMonthsStats(data, 2025);
   assert.equal(stats2025[4].total, 50);
 });
+
+test("visibleYearlyMonthsStats displays only months starting from first recorded month this year, and 12 months for subsequent years", () => {
+  const currentApp = {
+    ...emptyData(),
+    rewards: [
+      { id: "r1", amount: 13, label: "10月任务", date: "2026-10-15", week: "2026-10-12" },
+    ],
+  };
+
+  assert.equal(getStartMonth(currentApp), "2026-10");
+
+  // This year (2026): only from 10 to 12
+  const visible2026 = visibleYearlyMonthsStats(currentApp, 2026);
+  assert.equal(visible2026.length, 3);
+  assert.equal(visible2026[0].month, "2026-10");
+  assert.equal(visible2026[0].total, 13);
+  assert.equal(visible2026[1].month, "2026-11");
+  assert.equal(visible2026[1].total, 0);
+  assert.equal(visible2026[2].month, "2026-12");
+  assert.equal(visible2026[2].total, 0);
+
+  // Next year (2027): full 12 months
+  const visible2027 = visibleYearlyMonthsStats(currentApp, 2027);
+  assert.equal(visible2027.length, 12);
+  assert.equal(visible2027[0].month, "2027-01");
+  assert.equal(visible2027[11].month, "2027-12");
+
+  // Prior year (2025): empty
+  const visible2025 = visibleYearlyMonthsStats(currentApp, 2025);
+  assert.equal(visible2025.length, 0);
+});
+
 
 

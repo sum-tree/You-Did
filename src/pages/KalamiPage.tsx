@@ -1,6 +1,12 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
-import { balance, localDate, monthBalance, yearlyMonthsStats } from "../domain.ts";
+import {
+  balance,
+  getStartMonth,
+  localDate,
+  monthBalance,
+  visibleYearlyMonthsStats,
+} from "../domain.ts";
 import type { AppData } from "../domain.ts";
 import { KalamiIcon, shortDate } from "../components.tsx";
 import { playCorkPop, playCorkThump, playJarBounce, playJellyDrop } from "../audio.ts";
@@ -329,8 +335,26 @@ export function KalamiPage({
   const currentMonth = today.slice(0, 7);
   const currentYear = Number(today.slice(0, 4));
 
+  const startMonth = useMemo(() => getStartMonth(data), [data]);
+  const startYear = Number(startMonth.slice(0, 4));
+
   const [browsingYear, setBrowsingYear] = useState(() => currentYear);
   const [selectedMonth, setSelectedMonth] = useState(() => currentMonth);
+
+  const monthsStats = useMemo(
+    () => visibleYearlyMonthsStats(data, browsingYear),
+    [data, browsingYear],
+  );
+
+  useEffect(() => {
+    if (monthsStats.length > 0 && !monthsStats.some((s) => s.month === selectedMonth)) {
+      if (monthsStats.some((s) => s.month === currentMonth)) {
+        setSelectedMonth(currentMonth);
+      } else {
+        setSelectedMonth(monthsStats[0].month);
+      }
+    }
+  }, [monthsStats, selectedMonth, currentMonth]);
 
   const isBrowsingHistory = selectedMonth !== currentMonth;
   const selectedYear = selectedMonth.slice(0, 4);
@@ -1277,7 +1301,8 @@ export function KalamiPage({
             <button
               type="button"
               className="year-nav-btn"
-              onClick={() => setBrowsingYear((y) => y - 1)}
+              disabled={browsingYear <= startYear}
+              onClick={() => setBrowsingYear((y) => Math.max(startYear, y - 1))}
               aria-label="前一年"
             >
               <ChevronLeft size={16} />
@@ -1293,8 +1318,8 @@ export function KalamiPage({
             </button>
           </div>
         </div>
-        <div className="months-grid">
-          {yearlyMonthsStats(data, browsingYear).map((stat) => {
+        <div className={`months-grid ${monthsStats.length <= 3 ? "cols-3" : ""}`}>
+          {monthsStats.map((stat) => {
             const isCurrent = stat.month === currentMonth;
             const isSelected = stat.month === selectedMonth;
             const isFuture = stat.month > currentMonth;

@@ -1652,9 +1652,13 @@ main {
   cursor: pointer;
   transition: background 0.15s;
 }
-.year-nav-btn:hover {
+.year-nav-btn:hover:not(:disabled) {
   background: #e5e0cf;
   color: var(--ink);
+}
+.year-nav-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
 }
 .year-display {
   font-size: 12px;
@@ -1667,6 +1671,9 @@ main {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
   gap: 7px;
+}
+.months-grid.cols-3 {
+  grid-template-columns: repeat(3, 1fr);
 }
 .month-card {
   display: flex;
