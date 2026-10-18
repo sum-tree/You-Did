@@ -233,7 +233,7 @@ test("urgent deadlines cannot be hidden by a future planned week", () => {
   assert.equal(dailyTasks(data, day)[0].id, "urgent");
   assert.equal(chooseDaily(data, day, ["urgent"]).daily[day][0], "urgent");
 });
-test("manual planning is exact, deduplicated and capped, and can be explicitly empty", () => {
+test("manual planning is exact, deduplicated, and can be explicitly empty or exceed default three", () => {
   const data = dataWith(
     task("a"),
     task("b"),
@@ -244,7 +244,7 @@ test("manual planning is exact, deduplicated and capped, and can be explicitly e
     dailyTasks(chooseDaily(data, day, ["b", "b", "a", "c", "d"]), day).map(
       (t) => t.id,
     ),
-    ["b", "a", "c"],
+    ["b", "a", "c", "d"],
   );
   assert.deepEqual(dailyTasks(chooseDaily(data, day, []), day), []);
   assert.deepEqual(
@@ -991,6 +991,25 @@ test("visibleYearlyMonthsStats displays only months starting from first recorded
   const visible2025 = visibleYearlyMonthsStats(currentApp, 2025);
   assert.equal(visible2025.length, 0);
 });
+
+test("daily tasks can exceed default three when user explicitly adds or chooses more tasks", () => {
+  // When there are ordinary tasks, auto-planning picks 3 tasks (resume, ordinary, speech)
+  let data = ensureWeek(dataWith(task("a", "none", 1, { priority: 0 }), task("b")), day);
+  const defaultTasks = dailyTasks(data, day);
+  assert.equal(defaultTasks.length, 3);
+
+  // User adds a 4th custom task to today's schedule
+  const customTask = task("custom_today", "none", 1, { plannedWeek: day });
+  data = saveTask(data, customTask, day);
+  const updatedDaily = chooseDaily(data, day, [
+    ...defaultTasks.map((t) => t.id),
+    customTask.id,
+  ]);
+  const tasksNow = dailyTasks(updatedDaily, day);
+  assert.equal(tasksNow.length, 4);
+  assert.ok(tasksNow.some((t) => t.id === "custom_today"));
+});
+
 
 
 

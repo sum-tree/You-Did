@@ -98,10 +98,6 @@ export function TaskMenuSheet({
               onClick={async () => {
                 const date = localDate();
                 const ids = dailyTasks(data, date).map((item) => item.id);
-                if (!ids.includes(task.id) && ids.length >= 3) {
-                  notify("今日最多3项，请使用手动安排更换任务。");
-                  return;
-                }
                 if (
                   task.plannedWeek > weekStart(date) &&
                   (!task.dueDate || task.dueDate > date)
@@ -249,8 +245,8 @@ export function ChooserSheet({
   base: Snapshot;
 }) {
   return (
-    <Modal {...sync} title="安排今天的3件小事" close={close}>
-      <p className="form-note">选择最多3项。</p>
+    <Modal {...sync} title="安排今天的小事" close={close}>
+      <p className="form-note">选择要专注的任务，默认推荐3项。</p>
       <div className="chooser-list">
         {candidates.length ? (
           candidates.map((task) => (
@@ -258,7 +254,6 @@ export function ChooserSheet({
               <input
                 type="checkbox"
                 checked={selection.includes(task.id)}
-                disabled={!selection.includes(task.id) && selection.length >= 3}
                 onChange={(e) =>
                   setSelection((previous) =>
                     e.target.checked

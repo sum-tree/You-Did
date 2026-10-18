@@ -130,11 +130,6 @@ export default function App() {
   ) {
     if (!app.canChange()) return;
     const date = localDate();
-    const dailyNow = dailyTasks(data, date);
-    if (todaySelected && dailyNow.length >= 3) {
-      setToast("今日已有3项核心任务，请先更换或移出一项。");
-      return;
-    }
     const result = await update((previous) => {
       const next = saveTask(previous, task, date);
       const withDaily = todaySelected
@@ -358,9 +353,7 @@ export default function App() {
           <TaskForm
             existing={taskForm === "new" ? undefined : taskForm}
             today={today}
-            defaultToday={
-              page === "daily" && dailyTasks(data, today).length < 3
-            }
+            defaultToday={page === "daily"}
             close={() => setTaskForm(null)}
             commit={commitTask}
           />

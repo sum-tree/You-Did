@@ -730,8 +730,7 @@ export function dailyTasks(data: AppData, date: string): Task[] {
     // Explicit selection takes precedence; all urgent tasks remain in the reminder area.
     return [...new Set(manual)]
       .map((id) => open.find((task) => task.id === id))
-      .filter((task): task is Task => Boolean(task))
-      .slice(0, 3);
+      .filter((task): task is Task => Boolean(task));
   }
   // Generated series: one task per series per day; resume is guaranteed, then
   // ordinary tasks fill to two, then English (else Cantonese) if a slot is left.
@@ -796,7 +795,7 @@ export function chooseDaily(
     ...data,
     daily: {
       ...data.daily,
-      [date]: [...new Set(ids)].filter((id) => eligible.has(id)).slice(0, 3),
+      [date]: [...new Set(ids)].filter((id) => eligible.has(id)),
     },
   };
 }
