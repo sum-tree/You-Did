@@ -9,7 +9,13 @@ import {
 } from "../domain.ts";
 import type { AppData } from "../domain.ts";
 import { KalamiIcon, shortDate } from "../components.tsx";
-import { playCorkPop, playCorkThump, playJarBounce, playJellyDrop } from "../audio.ts";
+import {
+  playCorkPop,
+  playCorkThump,
+  playJarBounce,
+  playJellyDrop,
+  playKalamiBounceChorus,
+} from "../audio.ts";
 
 const JAR_SIZE = 100;
 const SEEN_KEY = "you-did:jar-seen";
@@ -899,6 +905,9 @@ export function KalamiPage({
         const delta = Math.abs(acc.x) + Math.abs(acc.y) + Math.abs(acc.z);
         if (delta > 22 && Date.now() - lastShake > 600) {
           lastShake = Date.now();
+          if (inJar > 0 && corkState === "closed") {
+            playKalamiBounceChorus(inJar);
+          }
           ballsRef.current.forEach((b) => {
             const heightFactor = Math.max(0.45, Math.min(1.0, (b.y - 50) / 220));
             b.vy -= (Math.random() * 1.5 + 2.0) * heightFactor;
@@ -918,12 +927,12 @@ export function KalamiPage({
       window.removeEventListener("deviceorientation", handleOrientation);
       window.removeEventListener("devicemotion", handleMotion);
     };
-  }, [gyroPermState]);
+  }, [gyroPermState, inJar, corkState]);
 
   // Tap / Click Interaction: Jumble & bounce the jellies
   const handleJarTap = () => {
     if (jarWobble || hasNew || corkState !== "closed") return;
-    playJarBounce();
+    playJarBounce(inJar);
     setJarWobble(true);
     setTimeout(() => setJarWobble(false), 650);
 
