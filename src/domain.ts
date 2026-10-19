@@ -977,7 +977,7 @@ function validateRecord(value: unknown, version: 1 | 2): boolean {
       ([date, ids]) =>
         validDate(date) &&
         Array.isArray(ids) &&
-        ids.length <= 3 &&
+        ids.length <= 100 &&
         ids.every((id) => text(id, 100)),
     )
   )

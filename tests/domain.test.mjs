@@ -1010,6 +1010,19 @@ test("daily tasks can exceed default three when user explicitly adds or chooses 
   assert.ok(tasksNow.some((t) => t.id === "custom_today"));
 });
 
+test("validateData accepts daily selection with more than three tasks", () => {
+  const tasks = Array.from({ length: 5 }, (_, i) => task(`t${i}`));
+  const data = dataWith(...tasks);
+  const withFour = {
+    ...data,
+    daily: {
+      [day]: ["t0", "t1", "t2", "t3"],
+    },
+  };
+  assert.equal(validateData(withFour), true);
+});
+
+
 
 
 
