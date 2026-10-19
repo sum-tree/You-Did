@@ -192,7 +192,14 @@ export function PoolPage({
                     )}
                     {task.steps && task.steps.length > 0 && (
                       <span className="steps-progress-label">
-                        准备步骤 {task.steps.filter((s) => s.done).length}/{task.steps.length}
+                        准备进度{" "}
+                        {Math.round(
+                          (task.steps.filter((s) => s.done).length /
+                            task.steps.length) *
+                            100,
+                        )}
+                        % ({task.steps.filter((s) => s.done).length}/
+                        {task.steps.length})
                       </span>
                     )}
                     {task.kind === "interview" &&

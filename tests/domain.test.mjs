@@ -12,10 +12,12 @@ import {
   emptyData,
   ensureWeek,
   generatedSeries,
+  getStepEncouragement,
   SERIES_NAME,
   inferContribution,
   interviewRewardInfo,
   localDate,
+  MOCK_INTERVIEW_STEPS,
   monthBalance,
   moveTasks,
   normalizeData,
@@ -28,6 +30,7 @@ import {
   settleRewards,
   validateData,
   validDate,
+  VIDEO_INTERVIEW_STEPS,
   weekStart,
   weekStats,
   yearlyMonthsStats,
@@ -886,6 +889,93 @@ test("step toggles do not grant rewards until the last step completes the interv
   assert.equal(data.tasks[0].steps[0].done, true);
   assert.equal(data.tasks[0].steps[1].done, true);
   assert.equal(balance(data), 0);
+});
+
+test("PRD 4.2: buildInterviewSteps generates exact 11 steps for video and interview templates", () => {
+  const videoSteps = buildInterviewSteps("video");
+  assert.equal(videoSteps.length, 11);
+  assert.deepEqual(
+    videoSteps.map((s) => s.title),
+    [...VIDEO_INTERVIEW_STEPS],
+  );
+  assert.equal(videoSteps[0].title, "搜集问题");
+  assert.equal(videoSteps[6].title, "录一次视频");
+  assert.equal(videoSteps[10].title, "录最终视频");
+
+  const ivSteps = buildInterviewSteps("interview");
+  assert.equal(ivSteps.length, 11);
+  assert.deepEqual(
+    ivSteps.map((s) => s.title),
+    [...MOCK_INTERVIEW_STEPS],
+  );
+  assert.equal(ivSteps[0].title, "搜集问题");
+  assert.equal(ivSteps[6].title, "Mock interview 10 题");
+  assert.equal(ivSteps[7].title, "复盘薄弱项，复读 3 遍");
+  assert.equal(ivSteps[10].title, "完成面试");
+});
+
+test("PRD 4.2: steps must be checked in sequence without skipping", () => {
+  const iv = task("iv-seq", "interview", 1, {
+    dueDate: "2026-10-15",
+    steps: buildInterviewSteps("interview"),
+  });
+  let data = dataWith(iv);
+
+  // Trying to check step 2 while step 1 is not done is rejected
+  data = toggleInterviewStep(data, "iv-seq", "step-2", day);
+  assert.equal(data.tasks[0].steps[1].done, false);
+
+  // Check step 1: succeeds
+  data = toggleInterviewStep(data, "iv-seq", "step-1", day);
+  assert.equal(data.tasks[0].steps[0].done, true);
+
+  // Trying to check step 3 while step 2 is not done is rejected
+  data = toggleInterviewStep(data, "iv-seq", "step-3", day);
+  assert.equal(data.tasks[0].steps[2].done, false);
+
+  // Check step 2: succeeds
+  data = toggleInterviewStep(data, "iv-seq", "step-2", day);
+  assert.equal(data.tasks[0].steps[1].done, true);
+
+  // Trying to uncheck step 1 while step 2 is done is rejected
+  data = toggleInterviewStep(data, "iv-seq", "step-1", day);
+  assert.equal(data.tasks[0].steps[0].done, true);
+
+  // Unchecking step 2 succeeds
+  data = toggleInterviewStep(data, "iv-seq", "step-2", day);
+  assert.equal(data.tasks[0].steps[1].done, false);
+
+  // Now unchecking step 1 succeeds
+  data = toggleInterviewStep(data, "iv-seq", "step-1", day);
+  assert.equal(data.tasks[0].steps[0].done, false);
+});
+
+test("PRD 4.2: completing all 11 steps sequentially completes the parent interview task", () => {
+  const iv = task("iv-11", "interview", 1, {
+    createdAt: "2026-10-12T09:00:00",
+    steps: buildInterviewSteps("video"),
+  });
+  let data = dataWith(iv);
+
+  for (let i = 1; i <= 10; i++) {
+    data = toggleInterviewStep(data, "iv-11", `step-${i}`, day);
+    assert.equal(data.tasks[0].status, "open");
+    assert.equal(balance(data), 0);
+  }
+
+  // Completing the 11th step completes the interview task and awards 12 kalami
+  data = toggleInterviewStep(data, "iv-11", "step-11", day);
+  assert.equal(data.tasks[0].status, "done");
+  assert.equal(balance(data), 12);
+  assert.ok(data.tasks[0].steps.every((s) => s.done));
+});
+
+test("PRD 4.2: getStepEncouragement returns tailored messages for interview steps", () => {
+  assert.ok(getStepEncouragement("搜集问题").includes("搜集问题"));
+  assert.ok(getStepEncouragement("写出所有问题的回答").includes("写出回答"));
+  assert.ok(getStepEncouragement("录一次视频").includes("面对镜头"));
+  assert.ok(getStepEncouragement("Mock interview 10 题").includes("Mock"));
+  assert.ok(getStepEncouragement("未知步骤").includes("踏实"));
 });
 
 test("tasks with steps survive validateData and normalizeData", () => {

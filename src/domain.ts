@@ -101,7 +101,7 @@ export function inferContribution(
   const one = (kind: Contribution) => ({ kind, amount: 1 });
   if (category === "course") return one("course");
   if (category === "job") {
-    if (/面试|interview/i.test(title)) return one("interview");
+    if (/面试|interview|录视频/i.test(title)) return one("interview");
     if (/测试|笔试|test/i.test(title)) return one("test");
     if (/简历|投递|cv|resume/i.test(title))
       return {
@@ -506,8 +506,54 @@ export function saveTask(data: AppData, task: Task, date: string): AppData {
     date,
   );
 }
-export function buildInterviewSteps(questionCount: number): InterviewStep[] {
-  const count = Math.min(50, Math.max(1, Math.floor(questionCount)));
+export const VIDEO_INTERVIEW_STEPS = [
+  "搜集问题",
+  "写出所有问题的回答",
+  "每个回答读 3 遍",
+  "记住 2 道回答",
+  "记住 5 道回答",
+  "记住所有回答",
+  "录一次视频",
+  "回看视频，查找问题",
+  "再录一次视频",
+  "再次回看",
+  "录最终视频",
+] as const;
+
+export const MOCK_INTERVIEW_STEPS = [
+  "搜集问题",
+  "写出所有问题的回答",
+  "每个回答读 3 遍",
+  "记住 2 道回答",
+  "记住 5 道回答",
+  "记住所有回答",
+  "Mock interview 10 题",
+  "复盘薄弱项，复读 3 遍",
+  "Mock interview 10 题",
+  "复盘薄弱项，复读 3 遍",
+  "完成面试",
+] as const;
+
+export type InterviewFormType = "video" | "interview";
+
+export function buildInterviewSteps(
+  typeOrCount: InterviewFormType | number = "interview",
+): InterviewStep[] {
+  if (typeOrCount === "video") {
+    return VIDEO_INTERVIEW_STEPS.map((title, index) => ({
+      id: `step-${index + 1}`,
+      title,
+      done: false,
+    }));
+  }
+  if (typeOrCount === "interview") {
+    return MOCK_INTERVIEW_STEPS.map((title, index) => ({
+      id: `step-${index + 1}`,
+      title,
+      done: false,
+    }));
+  }
+  const count = Math.min(50, Math.max(1, Math.floor(typeOrCount)));
   const titles: string[] = [
     "搜集问题",
     "写出所有问题的回答",
@@ -533,6 +579,36 @@ export function buildInterviewSteps(questionCount: number): InterviewStep[] {
     done: false,
   }));
 }
+
+export const STEP_ENCOURAGEMENTS: Record<string, string> = {
+  搜集问题: "太棒了，完成搜集问题！每一步都算数～",
+  写出所有问题的回答: "写出回答就是胜利，思路越来越清晰了！",
+  每个回答读3遍: "读了3遍，语感正在悄悄建立～",
+  "每个回答读 3 遍": "读了3遍，语感正在悄悄建立～",
+  记住2道回答: "记住2道啦！大脑正在高速建立神经连接！",
+  "记住 2 道回答": "记住2道啦！大脑正在高速建立神经连接！",
+  记住5道回答: "哇，已经记住5道了！记忆力超棒！",
+  "记住 5 道回答": "哇，已经记住5道了！记忆力超棒！",
+  记住所有回答: "所有回答都记住了，太了不起了！",
+  录一次视频: "录了一次视频，敢于面对镜头就是巨大突破！",
+  "回看视频，查找问题": "认真复盘查找问题，你正在变得更专业！",
+  再录一次视频: "再次录制明显更从容了，状态大好！",
+  再次回看: "又复盘了一遍，细节打磨得越来越好！",
+  录最终视频: "最终视频完成！恭喜你征服了这场录制！",
+  "Mock interview 10 题": "Mock 练习完成，面试手感渐入佳境！",
+  "复盘薄弱项，复读 3 遍": "薄弱项复盘到位，自信心倍增！",
+  完成面试: "恭喜完成面试！每一次全力以赴都值得骄傲！",
+};
+
+export function getStepEncouragement(stepTitle: string): string {
+  for (const [key, msg] of Object.entries(STEP_ENCOURAGEMENTS)) {
+    if (stepTitle.includes(key) || key.includes(stepTitle)) {
+      return msg;
+    }
+  }
+  return "太棒了，又迈出踏实的一小步！继续保持～";
+}
+
 export function shouldSuggestInterviewSplit(task: Task, today: string): boolean {
   if (task.kind !== "interview" || task.status !== "open" || !task.dueDate) {
     return false;
@@ -565,8 +641,23 @@ export function toggleInterviewStep(
 ): AppData {
   const task = data.tasks.find((item) => item.id === taskId);
   if (!task || task.status !== "open" || !task.steps) return data;
-  const steps = task.steps.map((s) =>
-    s.id === stepId ? { ...s, done: !s.done } : s,
+  const targetIndex = task.steps.findIndex((s) => s.id === stepId);
+  if (targetIndex === -1) return data;
+  const target = task.steps[targetIndex];
+
+  // 严格顺序勾选：
+  // 勾选某步时，前面所有步骤必须已完成
+  if (!target.done) {
+    const canCheck = task.steps.slice(0, targetIndex).every((s) => s.done);
+    if (!canCheck) return data;
+  } else {
+    // 撤销某步时，后面所有步骤必须未完成（只能从后往前逐步撤销）
+    const canUncheck = task.steps.slice(targetIndex + 1).every((s) => !s.done);
+    if (!canUncheck) return data;
+  }
+
+  const steps = task.steps.map((s, idx) =>
+    idx === targetIndex ? { ...s, done: !s.done } : s,
   );
   const allDone = steps.length > 0 && steps.every((s) => s.done);
   const nextData: AppData = {

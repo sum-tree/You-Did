@@ -1,10 +1,12 @@
-import { ChevronRight, Ellipsis, Settings2 } from "lucide-react";
+import { useState } from "react";
+import { ChevronDown, ChevronRight, Ellipsis, Settings2 } from "lucide-react";
 import { CATEGORY, dailyView, shouldSuggestInterviewSplit } from "../domain.ts";
 import type { AppData, Task } from "../domain.ts";
 import {
   dateLabel,
   KalamiIcon,
   longDate,
+  Progress,
   TaskCheck,
   taskRewardHint,
 } from "../components.tsx";
@@ -28,6 +30,7 @@ export function DailyPage({
   onToggleStep?: (task: Task, stepId: string) => void;
   onOpenSplit?: (task: Task) => void;
 }) {
+  const [openSubmenus, setOpenSubmenus] = useState<Record<string, boolean>>({});
   const todayList = dailyView(data, today);
   const manualToday = Object.hasOwn(data.daily, today);
   const completedToday = data.completions.filter((item) => item.date === today);
@@ -61,12 +64,35 @@ export function DailyPage({
         {todayList.length ? (
           todayList.map((task) => {
             const done = task.status === "done";
+            const hasSteps = Boolean(task.steps && task.steps.length > 0);
+            const doneSteps = task.steps
+              ? task.steps.filter((s) => s.done).length
+              : 0;
+            const totalSteps = task.steps ? task.steps.length : 0;
+            const percent = totalSteps
+              ? Math.round((doneSteps / totalSteps) * 100)
+              : 0;
+            const isSubmenuOpen = openSubmenus[task.id] ?? false;
+
             return (
               <article
                 className={`task-card ${done ? "is-done" : ""}`}
                 key={task.id}
               >
-                <TaskCheck task={task} onFinish={onFinish} />
+                <TaskCheck
+                  task={task}
+                  onFinish={(t) => {
+                    if (t.status === "open" && t.steps && t.steps.length > 0) {
+                      const allDone = t.steps.every((s) => s.done);
+                      if (!allDone) {
+                        setOpenSubmenus((prev) => ({ ...prev, [t.id]: true }));
+                        onFinish(t);
+                        return;
+                      }
+                    }
+                    onFinish(t);
+                  }}
+                />
                 <div className="task-content">
                   <h3>{task.title}</h3>
                   <div className="task-meta">
@@ -85,38 +111,118 @@ export function DailyPage({
                   {taskRewardHint(task, today) && (
                     <p className="reward-hint">{taskRewardHint(task, today)}</p>
                   )}
-                  {task.steps && task.steps.length > 0 && (
-                    <div className="interview-steps-box">
-                      <div className="interview-steps-header">
-                        <span className="steps-progress-label">
-                          准备步骤 {task.steps.filter((s) => s.done).length}/{task.steps.length}
-                        </span>
-                        {onOpenSplit && !done && (
-                          <button
-                            type="button"
-                            className="text-button adjust-steps-btn"
-                            onClick={() => onOpenSplit(task)}
-                          >
-                            调整小步
-                          </button>
-                        )}
-                      </div>
-                      <div className="step-checkbox-list">
-                        {task.steps.map((step) => (
-                          <label
-                            key={step.id}
-                            className={`step-item ${step.done ? "is-step-done" : ""}`}
-                          >
-                            <input
-                              type="checkbox"
-                              checked={step.done}
-                              disabled={done}
-                              onChange={() => onToggleStep?.(task, step.id)}
+                  {hasSteps && (
+                    <div className="interview-steps-block">
+                      <div
+                        className="interview-progress-section"
+                        role="button"
+                        tabIndex={0}
+                        aria-expanded={isSubmenuOpen}
+                        aria-label={`准备进度：${percent}%已完成，点击${isSubmenuOpen ? "收起" : "展开"}子菜单`}
+                        onClick={() =>
+                          setOpenSubmenus((prev) => ({
+                            ...prev,
+                            [task.id]: !isSubmenuOpen,
+                          }))
+                        }
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter" || e.key === " ") {
+                            e.preventDefault();
+                            setOpenSubmenus((prev) => ({
+                              ...prev,
+                              [task.id]: !isSubmenuOpen,
+                            }));
+                          }
+                        }}
+                      >
+                        <div className="interview-progress-header">
+                          <span className="step-pct-text">
+                            {percent}% 已完成
+                          </span>
+                          <span className="step-count-text">
+                            ({doneSteps}/{totalSteps})
+                          </span>
+                          <span className="submenu-trigger-hint">
+                            {isSubmenuOpen ? "收起子菜单" : "点击打开子菜单"}
+                            <ChevronDown
+                              size={14}
+                              className={`submenu-chevron ${isSubmenuOpen ? "is-open" : ""}`}
                             />
-                            <span>{step.title}</span>
-                          </label>
-                        ))}
+                          </span>
+                        </div>
+                        <Progress
+                          value={percent}
+                          label={`准备进度 ${percent}%`}
+                        />
                       </div>
+                      {isSubmenuOpen && (
+                        <div className="interview-submenu-box">
+                          <div className="interview-submenu-header">
+                            <span className="submenu-title">细分准备步骤</span>
+                            {onOpenSplit && !done && (
+                              <button
+                                type="button"
+                                className="text-button adjust-steps-btn"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  onOpenSplit(task);
+                                }}
+                              >
+                                调整小步
+                              </button>
+                            )}
+                          </div>
+                          <div
+                            className="step-table"
+                            role="table"
+                            aria-label="准备步骤清单"
+                          >
+                            {task.steps!.map((step, idx) => {
+                              const prevDone = task
+                                .steps!.slice(0, idx)
+                                .every((s) => s.done);
+                              const nextNotDone = task
+                                .steps!.slice(idx + 1)
+                                .every((s) => !s.done);
+                              const canToggle =
+                                !done && (step.done ? nextNotDone : prevDone);
+                              const isCurrent =
+                                !done && !step.done && prevDone;
+
+                              return (
+                                <div
+                                  key={step.id}
+                                  className={`step-row ${step.done ? "is-step-done" : ""} ${isCurrent ? "is-step-current" : ""}`}
+                                  onClick={(e) => e.stopPropagation()}
+                                >
+                                  <div className="step-col-check">
+                                    <input
+                                      type="checkbox"
+                                      checked={step.done}
+                                      disabled={!canToggle}
+                                      aria-label={`第${idx + 1}步：${step.title}`}
+                                      onChange={() =>
+                                        onToggleStep?.(task, step.id)
+                                      }
+                                    />
+                                  </div>
+                                  <div className="step-col-name">
+                                    <span className="step-num">{idx + 1}.</span>
+                                    <span className="step-title">
+                                      {step.title}
+                                    </span>
+                                    {isCurrent && (
+                                      <span className="step-current-tag">
+                                        当前进行
+                                      </span>
+                                    )}
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      )}
                     </div>
                   )}
                   {!task.steps &&

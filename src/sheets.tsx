@@ -608,11 +608,27 @@ export function InterviewSplitSheet({
   return (
     <Modal {...sync} title="拆成小步准备" close={close}>
       <p className="form-note">
-        根据问题总数生成分步清单。小步骤不计卡拉米，全部完成后自动完成原面试任务并结算奖励。
+        可选用 PRD 标准 11 步模板（面试或录视频），或按问题总数自定义生成。各小步不计单独卡拉米，全部完成后自动完成原面试任务并结算奖励。
       </p>
       <div className="split-form">
+        <div className="split-template-group">
+          <button
+            type="button"
+            className="outline-button"
+            onClick={() => setSteps(buildInterviewSteps("interview"))}
+          >
+            面试标准模板（11步）
+          </button>
+          <button
+            type="button"
+            className="outline-button"
+            onClick={() => setSteps(buildInterviewSteps("video"))}
+          >
+            录视频标准模板（11步）
+          </button>
+        </div>
         <label className="split-count-label">
-          <span>面试问题总数（1–50道）：</span>
+          <span>或按问题总数重置（1–50道）：</span>
           <div className="count-input-group">
             <input
               type="number"

@@ -12,6 +12,7 @@ import {
   chooseDaily,
   completeTask,
   dailyTasks,
+  getStepEncouragement,
   localDate,
   monthBalance,
   saveTask,
@@ -100,6 +101,13 @@ export default function App() {
       setToast(`已撤销完成，收回${taken}卡拉米。`);
       return;
     }
+    if (task.status === "open" && task.steps && task.steps.length > 0) {
+      const allDone = task.steps.every((s) => s.done);
+      if (!allDone) {
+        setToast("请在细分子菜单中按顺序完成各准备步骤～");
+        return;
+      }
+    }
     const result = await update(
       (previous) => completeTask(previous, task.id, date),
       base,
@@ -113,6 +121,9 @@ export default function App() {
     const date = localDate();
     app.setToday(date);
     const base = snapshot.current;
+    const targetStep = task.steps?.find((s) => s.id === stepId);
+    const willBeDone = targetStep ? !targetStep.done : false;
+
     const result = await update(
       (previous) => toggleInterviewStep(previous, task.id, stepId, date),
       base,
@@ -121,6 +132,8 @@ export default function App() {
     const earned = balance(result.snapshot.data) - balance(base.data);
     if (earned > 0) {
       setToast(`You did it! 全部步骤已完成，+${earned} 卡拉米 · 每一步都算数`);
+    } else if (willBeDone && targetStep) {
+      setToast(getStepEncouragement(targetStep.title));
     }
   }
   async function commitTask(

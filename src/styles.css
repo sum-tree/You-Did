@@ -1772,25 +1772,74 @@ main {
 }
 
 /* Interview Split Suggestion & Steps */
-.interview-steps-box {
+.interview-steps-block {
   margin-top: 10px;
-  background: #f7f9f2;
-  border: 1px solid #e1e7d5;
-  border-radius: 8px;
-  padding: 10px 12px;
   display: flex;
   flex-direction: column;
   gap: 8px;
 }
-.interview-steps-header {
+.interview-progress-section {
+  background: #f8faf4;
+  border: 1px solid #e2ebd5;
+  border-radius: 8px;
+  padding: 8px 10px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.interview-progress-section:hover,
+.interview-progress-section:focus-visible {
+  background: #f3f8ee;
+  border-color: #d1dfbf;
+  outline: none;
+}
+.interview-progress-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
   font-size: 12px;
+  margin-bottom: 6px;
 }
-.steps-progress-label {
+.step-pct-text {
+  font-weight: 700;
+  color: #48583d;
+}
+.step-count-text {
+  color: #7b8870;
+  font-size: 11px;
+  margin-left: 4px;
+}
+.submenu-trigger-hint {
+  font-size: 11px;
+  color: #647355;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  margin-left: auto;
+}
+.submenu-chevron {
+  transition: transform 0.2s ease;
+}
+.submenu-chevron.is-open {
+  transform: rotate(180deg);
+}
+.interview-submenu-box {
+  background: #fffdf9;
+  border: 1px solid #e1e7d5;
+  border-radius: 8px;
+  padding: 8px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  box-shadow: 0 1px 4px #545c250d;
+}
+.interview-submenu-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.submenu-title {
   font-size: 12px;
-  font-weight: 600;
+  font-weight: 650;
   color: #4c5843;
 }
 .adjust-steps-btn {
@@ -1798,36 +1847,137 @@ main {
   padding: 2px 6px;
   color: #647353;
 }
-.step-checkbox-list {
+.step-table {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 4px;
 }
-.step-item {
+.step-row {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   gap: 8px;
-  font-size: 13px;
-  color: #3b4435;
-  cursor: pointer;
-  line-height: 1.4;
+  padding: 5px 6px;
+  border-radius: 6px;
+  transition: background 0.12s ease;
 }
-.step-item input[type="checkbox"] {
-  margin-top: 2px;
-  width: 16px;
-  height: 16px;
-  accent-color: #647353;
-  cursor: pointer;
+.step-row.is-step-current {
+  background: #f4f8eb;
+  border: 1px solid #dbe6cb;
+}
+.step-col-check {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
   flex-shrink: 0;
 }
-.step-item span {
+.step-col-check input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  accent-color: #556348;
+  cursor: pointer;
+}
+.step-col-check input[type="checkbox"]:disabled {
+  cursor: not-allowed;
+  opacity: 0.35;
+}
+.step-col-name {
+  flex: 1;
   min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: #3b4435;
+  line-height: 1.4;
+}
+.step-num {
+  font-size: 12px;
+  color: #8c977f;
+  font-weight: 600;
+  width: 20px;
+  text-align: right;
+  flex-shrink: 0;
+}
+.step-title {
   word-break: break-word;
   overflow-wrap: anywhere;
 }
-.step-item.is-step-done span {
+.step-row.is-step-done .step-title {
   text-decoration: line-through;
-  opacity: 0.6;
+  opacity: 0.55;
+}
+.step-row.is-step-current .step-title {
+  font-weight: 600;
+  color: #354728;
+}
+.step-current-tag {
+  font-size: 10px;
+  padding: 1px 5px;
+  background: #e2ecd3;
+  color: #495a3a;
+  border-radius: 4px;
+  margin-left: auto;
+  flex-shrink: 0;
+  font-weight: 500;
+}
+/* Form job format segmented control */
+.form-job-type {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+.form-field-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: #4c5843;
+}
+.segmented-control {
+  display: flex;
+  background: #ecefe5;
+  border-radius: 8px;
+  padding: 3px;
+  gap: 3px;
+}
+.segment-btn {
+  flex: 1;
+  padding: 6px 10px;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  color: #657157;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.segment-btn.active {
+  background: #ffffff;
+  color: #36412e;
+  font-weight: 650;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+}
+.form-sub-hint {
+  font-size: 11px;
+  color: #728063;
+  margin: 2px 0 0 2px;
+  line-height: 1.4;
+}
+/* Template buttons in split sheet */
+.split-template-group {
+  display: flex;
+  gap: 8px;
+}
+.split-template-group button {
+  flex: 1;
+  font-size: 12px;
+  padding: 8px 6px;
+}
+.steps-progress-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: #4c5843;
 }
 .split-suggestion {
   margin-top: 8px;

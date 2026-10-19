@@ -9,6 +9,7 @@ import {
   X,
 } from "lucide-react";
 import {
+  buildInterviewSteps,
   CATEGORY,
   dateObject,
   inferContribution,
@@ -17,7 +18,7 @@ import {
   taskReward,
   weekStart,
 } from "./domain.ts";
-import type { CalendarEvent, Category, Task } from "./domain.ts";
+import type { CalendarEvent, Category, InterviewStep, Task } from "./domain.ts";
 
 export const shortDate = (date: string) =>
   dateObject(date).toLocaleDateString("zh-CN", {
@@ -288,6 +289,19 @@ export function TaskForm({
   const [category, setCategory] = useState<Category>(
     existing?.category ?? "job",
   );
+  const initialJobForm = (): "other" | "video" | "interview" => {
+    if (!existing) return "other";
+    if (existing.steps && existing.steps.length > 0) {
+      if (existing.steps.some((s) => s.title.includes("视频"))) return "video";
+      return "interview";
+    }
+    if (existing.kind === "interview") return "interview";
+    return "other";
+  };
+  const [jobForm, setJobForm] = useState<"other" | "video" | "interview">(
+    initialJobForm,
+  );
+
   const submit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const fields = new FormData(event.currentTarget);
@@ -300,6 +314,38 @@ export function TaskForm({
       input.reportValidity();
       return;
     }
+
+    let kind: Task["kind"];
+    let amount: number;
+    let steps: InterviewStep[] | undefined = existing?.steps;
+
+    if (category === "job") {
+      if (jobForm === "video") {
+        kind = "interview";
+        amount = 1;
+        if (!steps || steps.length === 0 || initialJobForm() !== "video") {
+          steps = buildInterviewSteps("video");
+        }
+      } else if (jobForm === "interview") {
+        kind = "interview";
+        amount = 1;
+        if (!steps || steps.length === 0 || initialJobForm() !== "interview") {
+          steps = buildInterviewSteps("interview");
+        }
+      } else {
+        const inf = inferContribution(title, "job");
+        kind = inf.kind;
+        amount = inf.amount;
+        if (initialJobForm() !== "other") {
+          steps = undefined;
+        }
+      }
+    } else {
+      const inf = inferContribution(title, category);
+      kind = inf.kind;
+      amount = inf.amount;
+    }
+
     commit(
       {
         id: existing?.id ?? crypto.randomUUID(),
@@ -309,9 +355,11 @@ export function TaskForm({
         dueDate: String(fields.get("dueDate")),
         // New tasks start in this week; use "移至下周" to plan ahead.
         plannedWeek: existing?.plannedWeek ?? weekStart(today),
-        ...inferContribution(title, category),
+        kind,
+        amount,
         status: "open",
         createdAt: existing?.createdAt ?? new Date().toISOString(),
+        ...(steps ? { steps } : {}),
       },
       fields.get("today") === "on",
       fields.get("calendar") === "on",
@@ -326,7 +374,7 @@ export function TaskForm({
           aria-label="任务名称"
           required
           maxLength={200}
-          placeholder="例如：投递3份心仪的岗位"
+          placeholder="例如：投递3份心仪的岗位 / 腾讯一面"
           defaultValue={existing?.title}
           onInput={(e) => e.currentTarget.setCustomValidity("")}
         />
@@ -345,6 +393,38 @@ export function TaskForm({
           ))}
         </select>
       </label>
+      {category === "job" && (
+        <div className="form-job-type">
+          <label className="form-field-label">任务形式</label>
+          <div
+            className="segmented-control"
+            role="radiogroup"
+            aria-label="香港揾工任务形式"
+          >
+            {[
+              { value: "other" as const, label: "其他" },
+              { value: "video" as const, label: "录视频" },
+              { value: "interview" as const, label: "面试" },
+            ].map((item) => (
+              <button
+                key={item.value}
+                type="button"
+                role="radio"
+                aria-checked={jobForm === item.value}
+                className={`segment-btn ${jobForm === item.value ? "active" : ""}`}
+                onClick={() => setJobForm(item.value)}
+              >
+                {item.label}
+              </button>
+            ))}
+          </div>
+          {jobForm !== "other" && (
+            <p className="form-sub-hint">
+              已选「{jobForm === "video" ? "录视频" : "面试"}」形式，将立即生成 11 步细分子任务；请填写截止日期（DDL）。
+            </p>
+          )}
+        </div>
+      )}
       <div className="form-row">
         <label>
           优先级
@@ -355,10 +435,11 @@ export function TaskForm({
           </select>
         </label>
         <label>
-          截止日期（选填）
+          截止日期{jobForm !== "other" && category === "job" ? "（DDL · 必填）" : "（选填）"}
           <input
             name="dueDate"
             type="date"
+            required={jobForm !== "other" && category === "job"}
             defaultValue={existing?.dueDate ?? ""}
             min="1900-01-01"
             max="2100-12-31"
