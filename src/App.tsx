@@ -394,7 +394,9 @@ export default function App() {
           sync={sync}
           update={update}
           close={() => setChooser(false)}
-          candidates={data.tasks.filter((task) => schedulable(task, today))}
+          candidates={data.tasks
+            .filter((task) => schedulable(task, today))
+            .sort((a, b) => a.priority - b.priority)}
           selection={selection}
           setSelection={setSelection}
           today={today}

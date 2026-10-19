@@ -510,16 +510,28 @@ test("a new week clears last week's open generated tasks but keeps records", () 
   };
   assert.equal(ensureWeek(restored, "2026-10-20"), restored);
 });
-test("daily plan: resume first, ordinary tasks next, then one speech task", () => {
+test("daily plan: P0 tasks first, then P1 series and ordinary tasks", () => {
   let data = ensureWeek(dataWith(task("a", "none", 1, { priority: 0 }), task("b")), day);
   assert.deepEqual(
     dailyTasks(data, day).map((t) => t.id),
-    [auto("resume", 1), "a", auto("english", 1)],
+    ["a", auto("resume", 1), auto("english", 1)],
   );
   data = ensureWeek(emptyData(), day);
   assert.deepEqual(
     dailyTasks(data, day).map((t) => t.id),
     [auto("resume", 1), auto("english", 1)],
+  );
+});
+test("daily tasks always sorted by priority P0-P2 regardless of manual addition order", () => {
+  const data = dataWith(
+    task("p1_task", "none", 1, { priority: 1 }),
+    task("p2_task", "none", 1, { priority: 2 }),
+    task("p0_task", "none", 1, { priority: 0 }),
+  );
+  const chosen = chooseDaily(data, day, ["p1_task", "p2_task", "p0_task"]);
+  assert.deepEqual(
+    dailyTasks(chosen, day).map((t) => t.id),
+    ["p0_task", "p1_task", "p2_task"],
   );
 });
 test("each series appears once a day and Cantonese waits for English", () => {

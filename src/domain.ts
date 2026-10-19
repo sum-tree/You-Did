@@ -647,6 +647,7 @@ export const WEEKLY_TASKS = [
     kind: "resume",
     amount: 5,
     count: 3,
+    priority: 1,
   },
   {
     series: "english",
@@ -655,6 +656,7 @@ export const WEEKLY_TASKS = [
     kind: "english",
     amount: 3,
     count: 3,
+    priority: 1,
   },
   {
     series: "cantonese",
@@ -663,6 +665,7 @@ export const WEEKLY_TASKS = [
     kind: "cantonese",
     amount: 1,
     count: 2,
+    priority: 1,
   },
 ] as const;
 type Series = (typeof WEEKLY_TASKS)[number]["series"];
@@ -687,11 +690,16 @@ export function ensureWeek(data: AppData, date: string): AppData {
   const week = weekStart(date);
   if (data.autoWeek && data.autoWeek >= week) return data;
   const existing = new Set(data.tasks.map((task) => task.id));
-  const tasks: Task[] = data.tasks.map((task) =>
-    isGenerated(task) && task.status === "open" && task.plannedWeek < week
-      ? { ...task, status: "archived" }
-      : task,
-  );
+  const tasks: Task[] = data.tasks.map((task) => {
+    if (!isGenerated(task)) return task;
+    if (task.status === "open" && task.plannedWeek < week) {
+      return { ...task, status: "archived" };
+    }
+    if (task.status === "open" && task.priority === 0) {
+      return { ...task, priority: 1 };
+    }
+    return task;
+  });
   for (const item of WEEKLY_TASKS)
     for (let n = 1; n <= item.count; n++) {
       const id = `auto:${week}:${item.series}:${n}`;
@@ -700,7 +708,7 @@ export function ensureWeek(data: AppData, date: string): AppData {
         id,
         title: item.title,
         category: item.category,
-        priority: 1,
+        priority: item.priority,
         dueDate: "",
         plannedWeek: week,
         kind: item.kind,
@@ -730,7 +738,8 @@ export function dailyTasks(data: AppData, date: string): Task[] {
     // Explicit selection takes precedence; all urgent tasks remain in the reminder area.
     return [...new Set(manual)]
       .map((id) => open.find((task) => task.id === id))
-      .filter((task): task is Task => Boolean(task));
+      .filter((task): task is Task => Boolean(task))
+      .sort((a, b) => a.priority - b.priority);
   }
   // Generated series: one task per series per day; resume is guaranteed, then
   // ordinary tasks fill to two, then English (else Cantonese) if a slot is left.
@@ -766,7 +775,7 @@ export function dailyTasks(data: AppData, date: string): Task[] {
       ? undefined
       : (next("english") ?? next("cantonese"));
   if (speaking && picked.length < 3) picked.push(speaking);
-  return picked;
+  return picked.sort((a, b) => a.priority - b.priority);
 }
 // Open core tasks first, then tasks actually completed that day; each ID appears once.
 export function dailyView(data: AppData, date: string): Task[] {
@@ -807,7 +816,7 @@ export function normalizeData(data: AppData): AppData {
       id: t.id,
       title: t.title,
       category: t.category,
-      priority: t.priority,
+      priority: isGenerated(t) && t.priority === 0 ? 1 : t.priority,
       dueDate: t.dueDate,
       plannedWeek: t.plannedWeek,
       kind: t.kind,
