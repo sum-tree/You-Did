@@ -6,6 +6,7 @@ import {
   balance,
   buildInterviewSteps,
   chooseDaily,
+  cleanupDuplicateTasks,
   completeTask,
   dailyTasks,
   dailyView,
@@ -1200,6 +1201,46 @@ test("dailyTasks auto-fills uncompleted ordinary tasks carried over from past we
   const data = dataWith(oldTask);
   const picked = dailyTasks(data, currentDay);
   assert.ok(picked.some((t) => t.id === "old_review"));
+});
+
+test("cleanupDuplicateTasks archives duplicate open custom tasks favoring the one with a deadline", () => {
+  const taskWithDdl = task("cs_with_ddl", "none", 1, {
+    title: "CS5187 Assign1",
+    category: "course",
+    dueDate: "2026-10-23",
+  });
+  const taskWithoutDdl = task("cs_no_ddl", "none", 1, {
+    title: "CS5187 Assign1",
+    category: "course",
+    dueDate: "",
+  });
+  const distinctTask = task("cs_review", "none", 1, {
+    title: "CS5187 L7复习",
+    category: "course",
+    dueDate: "",
+  });
+
+  const data = dataWith(taskWithoutDdl, taskWithDdl, distinctTask);
+  const cleaned = cleanupDuplicateTasks(data);
+
+  // The one with deadline remains open
+  assert.equal(cleaned.tasks.find((t) => t.id === "cs_with_ddl").status, "open");
+  // The one without deadline is archived
+  assert.equal(cleaned.tasks.find((t) => t.id === "cs_no_ddl").status, "archived");
+  // Distinct task remains open
+  assert.equal(cleaned.tasks.find((t) => t.id === "cs_review").status, "open");
+
+  // Generated tasks with identical titles are never deduplicated
+  const gen1 = task("auto:2026-10-19:resume:1", "resume", 5, {
+    title: "香港秋招简历x5",
+  });
+  const gen2 = task("auto:2026-10-19:resume:2", "resume", 5, {
+    title: "香港秋招简历x5",
+  });
+  const dataWithGen = dataWith(gen1, gen2);
+  const cleanedGen = cleanupDuplicateTasks(dataWithGen);
+  assert.equal(cleanedGen.tasks.find((t) => t.id === "auto:2026-10-19:resume:1").status, "open");
+  assert.equal(cleanedGen.tasks.find((t) => t.id === "auto:2026-10-19:resume:2").status, "open");
 });
 
 

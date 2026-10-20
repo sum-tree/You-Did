@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { ensureWeek, localDate } from "./domain.ts";
+import { cleanupDuplicateTasks, ensureWeek, localDate } from "./domain.ts";
 import type { AppData } from "./domain.ts";
 import { loadData, saveChange, STORAGE_KEY } from "./storage.ts";
 import type { SaveResult, Snapshot } from "./storage.ts";
@@ -131,6 +131,19 @@ export function useAppStore(onBlocked: () => void) {
     // Weekly generation is the only write without a user action. It is idempotent:
     // on a conflict the newer record is accepted and this effect re-checks it.
     if (blocked || saving.current) return;
+    const cleaned = cleanupDuplicateTasks(snapshot.current.data);
+    if (cleaned !== snapshot.current.data) {
+      saving.current = true;
+      void saveChange(store, navigator.locks, snapshot.current, () => cleaned)
+        .then((result) => {
+          if (result.status === "error") setSaveIssue(result.message);
+          else accept(result.snapshot);
+        })
+        .finally(() => {
+          saving.current = false;
+        });
+      return;
+    }
     if (ensureWeek(snapshot.current.data, today) === snapshot.current.data)
       return;
     saving.current = true;

@@ -818,6 +818,49 @@ export function schedulable(task: Task, date: string): boolean {
       (!!task.dueDate && task.dueDate <= date))
   );
 }
+
+// Clean up duplicate non-generated open tasks (e.g. accidentally added twice).
+// Keeps the one with a deadline if available, otherwise keeps the earlier created one.
+export function cleanupDuplicateTasks(data: AppData): AppData {
+  const seen = new Map<string, Task>();
+  const toArchive = new Set<string>();
+
+  const openCustom = data.tasks.filter(
+    (t) => !isGenerated(t) && t.status === "open",
+  );
+
+  for (const task of openCustom) {
+    const key = `${task.category}:${task.title.trim().toLowerCase()}`;
+    const existing = seen.get(key);
+    if (!existing) {
+      seen.set(key, task);
+      continue;
+    }
+    if (existing.dueDate && !task.dueDate) {
+      toArchive.add(task.id);
+    } else if (!existing.dueDate && task.dueDate) {
+      toArchive.add(existing.id);
+      seen.set(key, task);
+    } else {
+      toArchive.add(task.id);
+    }
+  }
+
+  if (toArchive.size === 0) return data;
+
+  return {
+    ...data,
+    tasks: data.tasks.map((t) =>
+      toArchive.has(t.id) ? { ...t, status: "archived" } : t,
+    ),
+    daily: Object.fromEntries(
+      Object.entries(data.daily).map(([day, ids]) => [
+        day,
+        ids.filter((id) => !toArchive.has(id)),
+      ]),
+    ),
+  };
+}
 export type PoolWeekFilter = "current" | "next" | "past" | "archived";
 
 export function poolTasks(
