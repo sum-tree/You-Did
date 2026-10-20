@@ -1,11 +1,10 @@
 import { ArrowRight, ChevronLeft } from "lucide-react";
 import {
-  addDays,
   CATEGORY,
   generatedSeries,
+  poolTasks,
   SERIES_NAME,
   shouldSuggestInterviewSplit,
-  weekStart,
 } from "../domain.ts";
 import type { AppData, Category, Task } from "../domain.ts";
 import {
@@ -54,18 +53,8 @@ export function PoolPage({
   onBack: () => void;
   onOpenSplit?: (task: Task) => void;
 }) {
-  const week = weekStart(today);
   const archived = view.week === "archived";
-  const tasks = data.tasks.filter((task) => {
-    if (view.filter !== "all" && task.category !== view.filter) return false;
-    if (archived) return task.status === "archived";
-    if (task.status !== "open") return false;
-    return view.week === "current"
-      ? task.plannedWeek === week
-      : view.week === "next"
-        ? task.plannedWeek === addDays(week, 7)
-        : task.plannedWeek < week;
-  });
+  const tasks = poolTasks(data, today, view.week, view.filter);
   const rows: Row[] = [];
   const groups = new Map<string, Task[]>();
   for (const task of tasks) {

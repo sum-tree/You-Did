@@ -818,6 +818,30 @@ export function schedulable(task: Task, date: string): boolean {
       (!!task.dueDate && task.dueDate <= date))
   );
 }
+export type PoolWeekFilter = "current" | "next" | "past" | "archived";
+
+export function poolTasks(
+  data: AppData,
+  date: string,
+  weekView: PoolWeekFilter = "current",
+  categoryFilter: Category | "all" = "all",
+): Task[] {
+  const week = weekStart(date);
+  const archived = weekView === "archived";
+  return data.tasks.filter((task) => {
+    if (categoryFilter !== "all" && task.category !== categoryFilter) return false;
+    if (archived) return task.status === "archived";
+    if (task.status !== "open") return false;
+    const isDueThisWeekOrOverdue = Boolean(
+      task.dueDate && task.dueDate <= addDays(week, 6),
+    );
+    return weekView === "current"
+      ? task.plannedWeek <= week || isDueThisWeekOrOverdue
+      : weekView === "next"
+        ? task.plannedWeek === addDays(week, 7) && !isDueThisWeekOrOverdue
+        : task.plannedWeek < week;
+  });
+}
 export function dailyTasks(data: AppData, date: string): Task[] {
   const currentWeek = weekStart(date);
   const open = data.tasks.filter((task) => schedulable(task, date));
@@ -856,7 +880,7 @@ export function dailyTasks(data: AppData, date: string): Task[] {
     picked.push(task);
   }
   for (const task of open
-    .filter((task) => !isGenerated(task) && task.plannedWeek === currentWeek)
+    .filter((task) => !isGenerated(task) && task.plannedWeek <= currentWeek)
     .sort(prioritySort)) {
     if (picked.length >= 2) break;
     if (!picked.includes(task)) picked.push(task);

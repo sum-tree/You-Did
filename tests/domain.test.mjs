@@ -21,6 +21,7 @@ import {
   monthBalance,
   moveTasks,
   normalizeData,
+  poolTasks,
   saveTask,
   setInterviewSteps,
   shouldSuggestInterviewSplit,
@@ -1123,6 +1124,84 @@ test("validateData accepts daily selection with more than three tasks", () => {
   };
   assert.equal(validateData(withFour), true);
 });
+
+test("poolTasks includes uncompleted past-week tasks and due-this-week tasks in current week view", () => {
+  const pastWeek = "2026-10-12";
+  const thisWeekMonday = "2026-10-19";
+  const todayDate = "2026-10-20";
+  const nextWeekMonday = "2026-10-26";
+
+  const taskPastNoDdl = task("cs_noddl", "none", 1, {
+    category: "course",
+    plannedWeek: pastWeek,
+    dueDate: "",
+  });
+  const taskPastWithDdlThisWeek = task("cs_assign1_due", "none", 1, {
+    category: "course",
+    plannedWeek: pastWeek,
+    dueDate: "2026-10-23",
+  });
+  const taskThisWeek = task("cs_this_week", "none", 1, {
+    category: "course",
+    plannedWeek: thisWeekMonday,
+    dueDate: "",
+  });
+  const taskNextWeekDueLater = task("next_task", "none", 1, {
+    category: "course",
+    plannedWeek: nextWeekMonday,
+    dueDate: "2026-10-28",
+  });
+  const taskNextWeekDueThisWeek = task("next_but_urgent", "none", 1, {
+    category: "job",
+    plannedWeek: nextWeekMonday,
+    dueDate: "2026-10-22",
+  });
+
+  const data = dataWith(
+    taskPastNoDdl,
+    taskPastWithDdlThisWeek,
+    taskThisWeek,
+    taskNextWeekDueLater,
+    taskNextWeekDueThisWeek,
+  );
+
+  const currentPool = poolTasks(data, todayDate, "current", "all");
+  const currentIds = currentPool.map((t) => t.id);
+
+  // All 3 CS tasks are in the current week pool:
+  assert.ok(currentIds.includes("cs_noddl"));
+  assert.ok(currentIds.includes("cs_assign1_due"));
+  assert.ok(currentIds.includes("cs_this_week"));
+  // Next week task due this week is pulled into current pool:
+  assert.ok(currentIds.includes("next_but_urgent"));
+  // Next week task due next week stays out of current pool:
+  assert.equal(currentIds.includes("next_task"), false);
+
+  // Next week pool check:
+  const nextPool = poolTasks(data, todayDate, "next", "all");
+  const nextIds = nextPool.map((t) => t.id);
+  assert.ok(nextIds.includes("next_task"));
+  assert.equal(nextIds.includes("next_but_urgent"), false);
+
+  // Category filter check:
+  const coursePool = poolTasks(data, todayDate, "current", "course");
+  assert.equal(coursePool.length, 3);
+  assert.ok(coursePool.every((t) => t.category === "course"));
+});
+
+test("dailyTasks auto-fills uncompleted ordinary tasks carried over from past weeks", () => {
+  const pastWeek = "2026-10-05";
+  const currentDay = "2026-10-13";
+  const oldTask = task("old_review", "none", 1, {
+    category: "course",
+    plannedWeek: pastWeek,
+    dueDate: "",
+  });
+  const data = dataWith(oldTask);
+  const picked = dailyTasks(data, currentDay);
+  assert.ok(picked.some((t) => t.id === "old_review"));
+});
+
 
 
 
