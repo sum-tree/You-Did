@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { ChevronDown, ChevronRight, Ellipsis, Settings2 } from "lucide-react";
+import { ChevronRight, Ellipsis, Settings2 } from "lucide-react";
 import { CATEGORY, dailyView, shouldSuggestInterviewSplit } from "../domain.ts";
 import type { AppData, Task } from "../domain.ts";
 import {
@@ -118,7 +118,7 @@ export function DailyPage({
                         role="button"
                         tabIndex={0}
                         aria-expanded={isSubmenuOpen}
-                        aria-label={`准备进度：${percent}%已完成，点击${isSubmenuOpen ? "收起" : "展开"}子菜单`}
+                        aria-label={`准备进度：${percent}%已完成，点击${isSubmenuOpen ? "收起" : "展开"}细分步骤`}
                         onClick={() =>
                           setOpenSubmenus((prev) => ({
                             ...prev,
@@ -141,13 +141,6 @@ export function DailyPage({
                           </span>
                           <span className="step-count-text">
                             ({doneSteps}/{totalSteps})
-                          </span>
-                          <span className="submenu-trigger-hint">
-                            {isSubmenuOpen ? "收起子菜单" : "点击打开子菜单"}
-                            <ChevronDown
-                              size={14}
-                              className={`submenu-chevron ${isSubmenuOpen ? "is-open" : ""}`}
-                            />
                           </span>
                         </div>
                         <Progress
