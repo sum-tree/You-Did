@@ -420,7 +420,7 @@ export function TaskForm({
           </div>
           {jobForm !== "other" && (
             <p className="form-sub-hint">
-              已选「{jobForm === "video" ? "录视频" : "面试"}」形式，将立即生成 11 步细分子任务；请填写截止日期（DDL）。
+              已选「{jobForm === "video" ? "录视频" : "面试"}」形式，将立即生成 11 步细分子任务。
             </p>
           )}
         </div>
@@ -435,11 +435,10 @@ export function TaskForm({
           </select>
         </label>
         <label>
-          截止日期{jobForm !== "other" && category === "job" ? "（DDL · 必填）" : "（选填）"}
+          截止日期（选填）
           <input
             name="dueDate"
             type="date"
-            required={jobForm !== "other" && category === "job"}
             defaultValue={existing?.dueDate ?? ""}
             min="1900-01-01"
             max="2100-12-31"
