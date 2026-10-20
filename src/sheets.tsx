@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import {
   ArrowDownToLine,
   ArrowRight,
@@ -6,6 +6,7 @@ import {
   CalendarDays,
   Check,
   Clock3,
+  Menu,
   Plus,
   Upload,
   X,
@@ -558,42 +559,59 @@ export function InterviewSplitSheet({
   task: Task;
   base: Snapshot;
 }) {
-  const [questionCount, setQuestionCount] = useState<number>(() => {
+  const [activeTemplate, setActiveTemplate] = useState<
+    "interview" | "video" | "custom"
+  >(() => {
     if (task.steps && task.steps.length > 0) {
-      for (const step of task.steps) {
-        const m = /共(\d+)道/.exec(step.title);
-        if (m) return Number(m[1]);
-      }
+      if (task.steps.some((s) => s.title.includes("视频"))) return "video";
+      return "interview";
     }
-    return 5;
+    return "interview";
   });
+
   const [steps, setSteps] = useState<InterviewStep[]>(() => {
     if (task.steps && task.steps.length > 0) {
       return task.steps;
     }
-    return buildInterviewSteps(5);
+    return buildInterviewSteps("interview");
   });
-  const [newTitle, setNewTitle] = useState("");
 
-  const regenerate = (count: number) => {
-    setQuestionCount(count);
-    const generated = buildInterviewSteps(count);
-    setSteps(generated);
+  const [newTitle, setNewTitle] = useState("");
+  const [dragIndex, setDragIndex] = useState<number | null>(null);
+  const touchStartY = useRef<number>(0);
+  const touchCurrentIndex = useRef<number>(0);
+  const addInputRef = useRef<HTMLInputElement>(null);
+
+  const moveStep = (fromIndex: number, toIndex: number) => {
+    if (fromIndex === toIndex) return;
+    setSteps((prev) => {
+      const next = [...prev];
+      const [moved] = next.splice(fromIndex, 1);
+      next.splice(toIndex, 0, moved);
+      return next;
+    });
+    setActiveTemplate("custom");
   };
 
   const handleTitleChange = (id: string, title: string) => {
     setSteps((prev) =>
       prev.map((s) => (s.id === id ? { ...s, title } : s)),
     );
+    setActiveTemplate("custom");
   };
 
   const handleDelete = (id: string) => {
     setSteps((prev) => prev.filter((s) => s.id !== id));
+    setActiveTemplate("custom");
   };
 
   const handleAdd = () => {
     const trimmed = newTitle.trim();
-    if (!trimmed) return;
+    if (!trimmed) {
+      notify("请先输入小步内容再添加");
+      addInputRef.current?.focus();
+      return;
+    }
     setSteps((prev) => [
       ...prev,
       {
@@ -603,80 +621,128 @@ export function InterviewSplitSheet({
       },
     ]);
     setNewTitle("");
+    setActiveTemplate("custom");
+    notify(`已添加「${trimmed}」`);
   };
 
   return (
     <Modal {...sync} title="拆成小步准备" close={close}>
       <p className="form-note">
-        可选用 PRD 标准 11 步模板（面试或录视频），或按问题总数自定义生成。各小步不计单独卡拉米，全部完成后自动完成原面试任务并结算奖励。
+        可选用 PRD 标准 11 步模板（面试或录视频），或自由编辑与拖动调整。各小步不计单独卡拉米，全部完成后自动完成原面试任务并结算奖励。
       </p>
       <div className="split-form">
         <div className="split-template-group">
           <button
             type="button"
-            className="outline-button"
-            onClick={() => setSteps(buildInterviewSteps("interview"))}
+            className={`template-btn ${activeTemplate === "interview" ? "active" : ""}`}
+            onClick={() => {
+              setSteps(buildInterviewSteps("interview"));
+              setActiveTemplate("interview");
+              notify("已应用面试标准模板（11步）");
+            }}
           >
+            {activeTemplate === "interview" && <Check size={14} />}
             面试标准模板（11步）
           </button>
           <button
             type="button"
-            className="outline-button"
-            onClick={() => setSteps(buildInterviewSteps("video"))}
+            className={`template-btn ${activeTemplate === "video" ? "active" : ""}`}
+            onClick={() => {
+              setSteps(buildInterviewSteps("video"));
+              setActiveTemplate("video");
+              notify("已应用录视频标准模板（11步）");
+            }}
           >
+            {activeTemplate === "video" && <Check size={14} />}
             录视频标准模板（11步）
           </button>
         </div>
-        <label className="split-count-label">
-          <span>或按问题总数重置（1–50道）：</span>
-          <div className="count-input-group">
-            <input
-              type="number"
-              min={1}
-              max={50}
-              value={questionCount}
-              onChange={(e) => {
-                const val = Number(e.target.value);
-                if (val >= 1 && val <= 50) {
-                  regenerate(val);
-                } else {
-                  setQuestionCount(val);
-                }
-              }}
-            />
-            <button
-              type="button"
-              className="text-button"
-              onClick={() => regenerate(questionCount || 5)}
-            >
-              按此重置模板
-            </button>
-          </div>
-        </label>
+
         <div className="steps-editor-list">
-          <h4>步骤清单（可编辑或删除）：</h4>
+          <h4>步骤清单（可编辑、拖动排序或删除）：</h4>
           {steps.map((step, idx) => (
-            <div key={step.id} className="step-editor-row">
-              <span className="step-index">{idx + 1}.</span>
-              <input
-                type="text"
-                value={step.title}
-                maxLength={200}
-                aria-label={`步骤 ${idx + 1}`}
-                onChange={(e) => handleTitleChange(step.id, e.target.value)}
-              />
+            <div
+              key={step.id}
+              data-step-index={idx}
+              className={`step-card-row ${dragIndex === idx ? "is-dragging" : ""}`}
+              draggable
+              onDragStart={(e) => {
+                e.dataTransfer.effectAllowed = "move";
+                setDragIndex(idx);
+              }}
+              onDragOver={(e) => {
+                e.preventDefault();
+                e.dataTransfer.dropEffect = "move";
+              }}
+              onDrop={(e) => {
+                e.preventDefault();
+                if (dragIndex !== null && dragIndex !== idx) {
+                  moveStep(dragIndex, idx);
+                }
+                setDragIndex(null);
+              }}
+              onDragEnd={() => setDragIndex(null)}
+            >
+              <div className="step-input-card">
+                <input
+                  type="text"
+                  value={step.title}
+                  maxLength={200}
+                  aria-label={`步骤 ${idx + 1}`}
+                  onChange={(e) => handleTitleChange(step.id, e.target.value)}
+                />
+                <button
+                  type="button"
+                  className="drag-handle-btn"
+                  aria-label={`拖动调整步骤 ${idx + 1} 顺序`}
+                  title="按住拖动调整顺序"
+                  onTouchStart={(e) => {
+                    const touch = e.touches[0];
+                    touchStartY.current = touch.clientY;
+                    touchCurrentIndex.current = idx;
+                    setDragIndex(idx);
+                  }}
+                  onTouchMove={(e) => {
+                    const touch = e.touches[0];
+                    const target = document.elementFromPoint(
+                      touch.clientX,
+                      touch.clientY,
+                    );
+                    const row = target?.closest("[data-step-index]");
+                    if (row) {
+                      const targetIdx = Number(
+                        row.getAttribute("data-step-index"),
+                      );
+                      if (
+                        !Number.isNaN(targetIdx) &&
+                        targetIdx !== touchCurrentIndex.current
+                      ) {
+                        moveStep(touchCurrentIndex.current, targetIdx);
+                        touchCurrentIndex.current = targetIdx;
+                        setDragIndex(targetIdx);
+                      }
+                    }
+                  }}
+                  onTouchEnd={() => setDragIndex(null)}
+                  onTouchCancel={() => setDragIndex(null)}
+                >
+                  <Menu size={16} />
+                </button>
+              </div>
               <button
                 type="button"
-                className="icon-button"
+                className="delete-step-btn"
                 aria-label={`删除步骤 ${idx + 1}`}
                 onClick={() => handleDelete(step.id)}
               >
-                <X size={16} />
+                <X size={18} />
               </button>
             </div>
           ))}
-          <div className="add-step-row">
+
+          <div className="add-step-card">
             <input
+              ref={addInputRef}
               type="text"
               placeholder="新增自定义小步..."
               value={newTitle}
@@ -689,13 +755,18 @@ export function InterviewSplitSheet({
                 }
               }}
             />
-            <button type="button" className="text-button" onClick={handleAdd}>
+            <button
+              type="button"
+              className="add-step-btn"
+              onClick={handleAdd}
+            >
               <Plus size={16} />
               添加
             </button>
           </div>
         </div>
       </div>
+
       <button
         className="primary full"
         onClick={async () => {
@@ -716,27 +787,6 @@ export function InterviewSplitSheet({
         <Check size={18} />
         确认采用拆分步骤
       </button>
-      {task.steps && task.steps.length > 0 && (
-        <button
-          className="text-button full"
-          onClick={async () => {
-            const result = await update((previous) => ({
-              ...previous,
-              tasks: previous.tasks.map((t) => {
-                if (t.id !== task.id) return t;
-                const copy = { ...t };
-                delete copy.steps;
-                return copy;
-              }),
-            }), base);
-            if (!result) return;
-            close();
-            notify("已清除拆分步骤，恢复原任务。");
-          }}
-        >
-          清除拆分步骤，恢复原任务
-        </button>
-      )}
     </Modal>
   );
 }

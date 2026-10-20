@@ -1955,10 +1955,32 @@ main {
   display: flex;
   gap: 8px;
 }
-.split-template-group button {
+.template-btn {
   flex: 1;
-  font-size: 12px;
-  padding: 8px 6px;
+  font-size: 13px;
+  font-weight: 500;
+  padding: 9px 8px;
+  border-radius: 8px;
+  border: 1px solid #dfe3d4;
+  background: #ffffff;
+  color: #556247;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  transition: all 0.15s ease;
+}
+.template-btn:hover {
+  background: #f7f9f2;
+  border-color: #cbd4be;
+}
+.template-btn.active {
+  background: #eef3e6;
+  border-color: #556247;
+  color: #3b4532;
+  font-weight: 650;
+  box-shadow: 0 1px 3px rgba(85, 98, 71, 0.15);
 }
 .steps-progress-label {
   font-size: 12px;
@@ -1992,31 +2014,11 @@ main {
   flex-direction: column;
   gap: 14px;
 }
-.split-count-label {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  font-size: 13px;
-  color: #4c5843;
-}
-.count-input-group {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-.count-input-group input {
-  width: 80px;
-  padding: 8px;
-  font-size: 14px;
-  border-radius: 8px;
-  border: 1px solid #dfe3d4;
-  background: #fffefa;
-}
 .steps-editor-list {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  max-height: 260px;
+  max-height: 280px;
   overflow-y: auto;
   padding-right: 4px;
 }
@@ -2024,42 +2026,128 @@ main {
   font-size: 13px;
   color: #4c5843;
   margin: 0;
+  font-weight: 600;
 }
-.step-editor-row {
+/* Reorderable step cards (matching Image 2) */
+.step-card-row {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
+  position: relative;
+  transition: transform 0.15s ease, opacity 0.15s ease;
+  user-select: none;
 }
-.step-index {
-  font-size: 12px;
-  font-weight: 600;
-  color: #727d65;
-  width: 22px;
-  text-align: right;
-  flex-shrink: 0;
+.step-card-row.is-dragging {
+  opacity: 0.5;
+  transform: scale(0.98);
 }
-.step-editor-row input {
+.step-input-card {
   flex: 1;
   min-width: 0;
-  padding: 6px 10px;
-  font-size: 13px;
-  border-radius: 7px;
-  border: 1px solid #dfe3d4;
-  background: #fffefa;
-}
-.add-step-row {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
+  background: #ffffff;
+  border: 1px solid #dfe3d4;
+  border-radius: 8px;
+  padding: 8px 12px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+.step-input-card:focus-within {
+  border-color: #728063;
+  box-shadow: 0 0 0 2px rgba(114, 128, 99, 0.15);
+}
+.step-input-card input {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  background: transparent;
+  outline: none;
+  font-size: 14px;
+  color: #3b4435;
+  padding: 0;
+}
+.drag-handle-btn {
+  background: transparent;
+  border: none;
+  color: #8c977f;
+  padding: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: grab;
+  touch-action: none;
+  border-radius: 4px;
+  flex-shrink: 0;
+  transition: color 0.15s ease, background 0.15s ease;
+}
+.drag-handle-btn:hover {
+  color: #4c5843;
+  background: #f4f6ee;
+}
+.drag-handle-btn:active {
+  cursor: grabbing;
+  color: #38452f;
+}
+.delete-step-btn {
+  color: #8c977f;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  padding: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  flex-shrink: 0;
+  transition: color 0.15s ease, background 0.15s ease;
+}
+.delete-step-btn:hover {
+  color: #c94a38;
+  background: #fbeee9;
+}
+.add-step-card {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: #ffffff;
+  border: 1px dashed #b9c4aa;
+  border-radius: 8px;
+  padding: 6px 8px 6px 12px;
   margin-top: 4px;
 }
-.add-step-row input {
+.add-step-card:focus-within {
+  border-color: #556247;
+  border-style: solid;
+}
+.add-step-card input {
   flex: 1;
   min-width: 0;
-  padding: 6px 10px;
+  border: none;
+  background: transparent;
+  outline: none;
+  font-size: 14px;
+  color: #3b4435;
+  padding: 0;
+}
+.add-step-btn {
+  background: #eef3e6;
+  border: 1px solid #cbd4be;
+  color: #47533c;
+  padding: 6px 12px;
+  border-radius: 6px;
   font-size: 13px;
-  border-radius: 7px;
-  border: 1px dashed #c0c6b3;
-  background: #fffefa;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: all 0.15s ease;
+}
+.add-step-btn:hover {
+  background: #dfe8d5;
+  border-color: #556247;
 }
 
