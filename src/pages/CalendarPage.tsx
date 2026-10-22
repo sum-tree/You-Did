@@ -111,7 +111,7 @@ export function CalendarPage({
               key={date}
               aria-label={`${longDate(date)}${date === today ? "，今天" : ""}，${count ? `${count}项任务事项` : "无事项"}`}
               aria-pressed={selectedDate === date}
-              className={`calendar-day-btn ${date.slice(0, 7) !== month.slice(0, 7) ? "other-month" : ""} ${date === today ? "today" : ""} ${date === selectedDate ? "selected" : ""}`}
+              className={`calendar-day-btn ${date < today ? "is-past" : ""} ${date.slice(0, 7) !== month.slice(0, 7) ? "other-month" : ""} ${date === today ? "today" : ""} ${date === selectedDate ? "selected" : ""}`}
               onClick={() => {
                 setSelectedDate(date);
                 openDay(date);

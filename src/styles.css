@@ -537,7 +537,7 @@ main {
   background: #f4f6ec;
   border-color: #d8decd;
 }
-.calendar-grid .calendar-day-btn.other-month {
+.calendar-grid .calendar-day-btn.is-past {
   color: #c9cdbe;
   background: #fafaf8;
   border-color: #f1f3ec;
