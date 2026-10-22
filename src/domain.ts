@@ -774,12 +774,45 @@ export const SERIES_NAME: Record<Series, string> = {
   cantonese: "粤语口语练习",
   english: "英语口语练习",
 };
+export const SEMESTER_START_WEEK = "2026-08-31";
+
+export function computeCourseWeek(date: string): number {
+  const week = weekStart(date);
+  const diffDays = Math.round(
+    (new Date(`${week}T00:00:00`).getTime() -
+      new Date(`${SEMESTER_START_WEEK}T00:00:00`).getTime()) /
+      86400000,
+  );
+  const diffWeeks = Math.floor(diffDays / 7);
+  return Math.min(15, Math.max(1, 1 + diffWeeks));
+}
+
 // Runs once per week: archives earlier generated tasks still open (the Sunday-midnight
 // clear), then creates this week's set. IDs and timestamps are deterministic so
 // concurrent tabs write identical records. Restored or archived ones are left alone.
+// Also advances courseWeek automatically as calendar weeks progress.
 export function ensureWeek(data: AppData, date: string): AppData {
   const week = weekStart(date);
-  if (data.autoWeek && data.autoWeek >= week) return data;
+  const expectedCourseWeek = computeCourseWeek(date);
+
+  let nextCourseWeek = data.courseWeek;
+  if (!data.autoWeek) {
+    nextCourseWeek = expectedCourseWeek;
+  } else if (data.autoWeek < week) {
+    const diffDays = Math.round(
+      (new Date(`${week}T00:00:00`).getTime() -
+        new Date(`${data.autoWeek}T00:00:00`).getTime()) /
+        86400000,
+    );
+    const elapsedWeeks = Math.floor(diffDays / 7);
+    nextCourseWeek = Math.min(15, Math.max(1, data.courseWeek + elapsedWeeks));
+  } else if (data.courseWeek < expectedCourseWeek) {
+    nextCourseWeek = expectedCourseWeek;
+  }
+
+  const courseWeekChanged = nextCourseWeek !== data.courseWeek;
+  if (data.autoWeek && data.autoWeek >= week && !courseWeekChanged) return data;
+
   const existing = new Set(data.tasks.map((task) => task.id));
   const tasks: Task[] = data.tasks.map((task) => {
     if (!isGenerated(task)) return task;
@@ -808,7 +841,7 @@ export function ensureWeek(data: AppData, date: string): AppData {
         createdAt: `${week}T00:00:00`,
       });
     }
-  return { ...data, tasks, autoWeek: week };
+  return { ...data, tasks, autoWeek: week, courseWeek: nextCourseWeek };
 }
 // Open tasks planned up to this week, or already due, may be placed on a day.
 export function schedulable(task: Task, date: string): boolean {

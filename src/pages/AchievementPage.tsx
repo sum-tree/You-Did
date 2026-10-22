@@ -73,7 +73,7 @@ export function AchievementPage({
       <section className="goal-card course">
         <div className="goal-heading">
           <span className="goal-icon">{categoryIcon("course")}</span>
-          <h3>课程作业</h3>
+          <h3>课程</h3>
           <span className="goal-value">
             <strong>
               第{data.courseWeek}

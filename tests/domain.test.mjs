@@ -8,6 +8,7 @@ import {
   chooseDaily,
   cleanupDuplicateTasks,
   completeTask,
+  computeCourseWeek,
   dailyTasks,
   dailyView,
   emptyData,
@@ -1241,6 +1242,38 @@ test("cleanupDuplicateTasks archives duplicate open custom tasks favoring the on
   const cleanedGen = cleanupDuplicateTasks(dataWithGen);
   assert.equal(cleanedGen.tasks.find((t) => t.id === "auto:2026-10-19:resume:1").status, "open");
   assert.equal(cleanedGen.tasks.find((t) => t.id === "auto:2026-10-19:resume:2").status, "open");
+});
+
+test("computeCourseWeek calculates correct 1-15 week based on calendar date", () => {
+  assert.equal(computeCourseWeek("2026-08-31"), 1);
+  assert.equal(computeCourseWeek("2026-09-02"), 1);
+  assert.equal(computeCourseWeek("2026-10-05"), 6);
+  assert.equal(computeCourseWeek("2026-10-12"), 7);
+  assert.equal(computeCourseWeek("2026-10-19"), 8);
+  assert.equal(computeCourseWeek("2026-10-22"), 8);
+  assert.equal(computeCourseWeek("2026-10-26"), 9);
+  assert.equal(computeCourseWeek("2026-12-07"), 15);
+  // Boundary clamping
+  assert.equal(computeCourseWeek("2026-08-01"), 1);
+  assert.equal(computeCourseWeek("2027-01-01"), 15);
+});
+
+test("ensureWeek automatically updates lagging courseWeek to current week and advances across weeks", () => {
+  // 1. Data stuck at week 6 on week 2026-10-19 updates to week 8
+  const stuckData = { ...emptyData(), courseWeek: 6, autoWeek: "2026-10-19" };
+  const updated = ensureWeek(stuckData, "2026-10-22");
+  assert.equal(updated.courseWeek, 8);
+  assert.equal(updated.autoWeek, "2026-10-19");
+
+  // 2. Crossing into next week advances courseWeek by 1
+  const nextWeek = ensureWeek(updated, "2026-10-26");
+  assert.equal(nextWeek.courseWeek, 9);
+  assert.equal(nextWeek.autoWeek, "2026-10-26");
+
+  // 3. User custom adjustment (e.g. week 7 instead of 8) is preserved and advances next week
+  const customAdjusted = { ...updated, courseWeek: 7 };
+  const customNextWeek = ensureWeek(customAdjusted, "2026-10-26");
+  assert.equal(customNextWeek.courseWeek, 8);
 });
 
 
