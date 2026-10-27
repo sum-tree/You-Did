@@ -6,7 +6,13 @@ import {
   SERIES_NAME,
   shouldSuggestInterviewSplit,
 } from "../domain.ts";
-import type { AppData, Category, Task } from "../domain.ts";
+import type {
+  AppData,
+  Category,
+  PoolStatusFilter,
+  PoolWeekFilter,
+  Task,
+} from "../domain.ts";
 import {
   contributionLabel,
   dateLabel,
@@ -16,13 +22,16 @@ import {
 
 // Held by App so the filters survive switching pages.
 export interface PoolView {
-  week: "current" | "next" | "past" | "archived";
-  filter: Category | "all";
+  category: Category | "all";
+  week: PoolWeekFilter;
+  status: PoolStatusFilter;
   expanded: string | null;
+  filter?: Category | "all";
 }
 export const initialPoolView: PoolView = {
+  category: "all",
   week: "current",
-  filter: "all",
+  status: "open",
   expanded: null,
 };
 type Row =
@@ -53,12 +62,14 @@ export function PoolPage({
   onBack: () => void;
   onOpenSplit?: (task: Task) => void;
 }) {
-  const archived = view.week === "archived";
-  const tasks = poolTasks(data, today, view.week, view.filter);
+  const category = view.category ?? view.filter ?? "all";
+  const week = view.week ?? "current";
+  const status = view.status ?? "open";
+  const tasks = poolTasks(data, today, week, category, status);
   const rows: Row[] = [];
   const groups = new Map<string, Task[]>();
   for (const task of tasks) {
-    const series = archived ? undefined : generatedSeries(task);
+    const series = status === "open" ? generatedSeries(task) : undefined;
     if (!series) {
       rows.push({ key: task.id, task });
       continue;
@@ -87,26 +98,14 @@ export function PoolPage({
       <section className="todo-table" aria-label="待办清单">
         <div className="table-tools">
           <select
-            aria-label="计划周筛选"
-            value={view.week}
+            aria-label="类型筛选"
+            value={category}
             onChange={(e) =>
               setView({
                 ...view,
-                week: e.target.value as PoolView["week"],
-                expanded: null,
+                category: e.target.value as Category | "all",
+                filter: e.target.value as Category | "all",
               })
-            }
-          >
-            <option value="current">本周</option>
-            <option value="next">下周</option>
-            <option value="past">往周</option>
-            <option value="archived">已清空</option>
-          </select>
-          <select
-            aria-label="类型筛选"
-            value={view.filter}
-            onChange={(e) =>
-              setView({ ...view, filter: e.target.value as PoolView["filter"] })
             }
           >
             <option value="all">全部类型</option>
@@ -116,8 +115,44 @@ export function PoolPage({
               </option>
             ))}
           </select>
+          <select
+            aria-label="计划周筛选"
+            value={week}
+            onChange={(e) =>
+              setView({
+                ...view,
+                week: e.target.value as PoolWeekFilter,
+                expanded: null,
+              })
+            }
+          >
+            <option value="current">本周</option>
+            <option value="next">下周</option>
+            <option value="past">往周</option>
+          </select>
+          <select
+            aria-label="状态筛选"
+            value={status}
+            onChange={(e) =>
+              setView({
+                ...view,
+                status: e.target.value as PoolStatusFilter,
+                expanded: null,
+              })
+            }
+          >
+            <option value="open">未完成</option>
+            <option value="done">已完成</option>
+            <option value="archived">已清空</option>
+          </select>
         </div>
-        {!archived && <p className="table-count">未完成 {rows.length} 项</p>}
+        <p className="table-count">
+          {status === "open"
+            ? `未完成 ${rows.length} 项`
+            : status === "done"
+              ? `已完成 ${rows.length} 项`
+              : `已清空 ${rows.length} 项`}
+        </p>
         <div className="todo-head" aria-hidden="true">
           <span>标题</span>
           <span>优先</span>
@@ -160,7 +195,7 @@ export function PoolPage({
                     {CATEGORY[task.category].short}
                   </span>
                   <span
-                    className={`todo-due ${task.dueDate && task.dueDate < today ? "late" : ""}`}
+                    className={`todo-due ${status === "open" && task.dueDate && task.dueDate < today ? "late" : ""}`}
                   >
                     {!task.dueDate
                       ? "—"

@@ -1214,6 +1214,42 @@ test("poolTasks includes uncompleted past-week tasks and due-this-week tasks in 
   assert.ok(coursePool.every((t) => t.category === "course"));
 });
 
+test("poolTasks filters correctly by status: open, done, and archived", () => {
+  const thisWeek = "2026-10-19";
+  const today = "2026-10-20";
+  const openTask = task("t_open", "none", 1, {
+    plannedWeek: thisWeek,
+    category: "course",
+  });
+  const doneTask = task("t_done", "none", 1, {
+    plannedWeek: thisWeek,
+    category: "job",
+  });
+  const archivedTask = task("t_archived", "none", 1, {
+    plannedWeek: thisWeek,
+    category: "course",
+    status: "archived",
+  });
+
+  let data = dataWith(openTask, doneTask, archivedTask);
+  data = completeTask(data, "t_done", today);
+
+  // Status open: only openTask
+  const openList = poolTasks(data, today, "current", "all", "open");
+  assert.equal(openList.length, 1);
+  assert.equal(openList[0].id, "t_open");
+
+  // Status done: only doneTask
+  const doneList = poolTasks(data, today, "current", "all", "done");
+  assert.equal(doneList.length, 1);
+  assert.equal(doneList[0].id, "t_done");
+
+  // Status archived: only archivedTask
+  const archivedList = poolTasks(data, today, "current", "all", "archived");
+  assert.equal(archivedList.length, 1);
+  assert.equal(archivedList[0].id, "t_archived");
+});
+
 test("dailyTasks auto-fills uncompleted ordinary tasks carried over from past weeks", () => {
   const pastWeek = "2026-10-05";
   const currentDay = "2026-10-13";

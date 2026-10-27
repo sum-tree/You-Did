@@ -929,18 +929,30 @@ export function cleanupDuplicateTasks(data: AppData): AppData {
   };
 }
 export type PoolWeekFilter = "current" | "next" | "past" | "archived";
+export type PoolStatusFilter = "open" | "done" | "archived";
 
 export function poolTasks(
   data: AppData,
   date: string,
   weekView: PoolWeekFilter = "current",
   categoryFilter: Category | "all" = "all",
+  statusFilter: PoolStatusFilter = "open",
 ): Task[] {
   const week = weekStart(date);
-  const archived = weekView === "archived";
+  const isArchived = statusFilter === "archived" || weekView === "archived";
   return data.tasks.filter((task) => {
     if (categoryFilter !== "all" && task.category !== categoryFilter) return false;
-    if (archived) return task.status === "archived";
+    if (isArchived) return task.status === "archived";
+    if (statusFilter === "done") {
+      if (task.status !== "done") return false;
+      const comp = data.completions.find((c) => c.taskId === task.id);
+      const taskWeek = comp ? comp.week : task.plannedWeek;
+      return weekView === "current"
+        ? taskWeek === week
+        : weekView === "next"
+          ? taskWeek === addDays(week, 7)
+          : taskWeek < week;
+    }
     if (task.status !== "open") return false;
     const isDueThisWeekOrOverdue = Boolean(
       task.dueDate && task.dueDate <= addDays(week, 6),
