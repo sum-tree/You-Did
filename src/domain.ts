@@ -816,16 +816,25 @@ export function ensureWeek(data: AppData, date: string): AppData {
   if (data.autoWeek && data.autoWeek >= week && !courseWeekChanged) return data;
 
   const existing = new Set(data.tasks.map((task) => task.id));
-  const tasks: Task[] = data.tasks.map((task) => {
-    if (!isGenerated(task)) return task;
-    if (task.status === "open" && task.plannedWeek < week) {
-      return { ...task, status: "archived" };
-    }
-    if (task.status === "open" && task.priority === 0) {
-      return { ...task, priority: 1 };
-    }
-    return task;
-  });
+  const tasks: Task[] = data.tasks
+    .filter((task) => {
+      // 往周未完成的周固定自动任务在跨周后直接清理，不移入「已清空」造成列表堆积
+      if (
+        isGenerated(task) &&
+        task.status === "open" &&
+        task.plannedWeek < week
+      ) {
+        return false;
+      }
+      return true;
+    })
+    .map((task) => {
+      if (!isGenerated(task)) return task;
+      if (task.status === "open" && task.priority === 0) {
+        return { ...task, priority: 1 };
+      }
+      return task;
+    });
   for (const item of WEEKLY_TASKS)
     for (let n = 1; n <= item.count; n++) {
       const id = `auto:${week}:${item.series}:${n}`;
@@ -854,11 +863,12 @@ export function schedulable(task: Task, date: string): boolean {
   );
 }
 
-// Clean up duplicate non-generated open tasks (e.g. accidentally added twice).
-// Keeps the one with a deadline if available, otherwise keeps the earlier created one.
+// Clean up duplicate non-generated open tasks (e.g. accidentally added twice),
+// and purge legacy auto-archived generated tasks / duplicate archived items from "已清空".
+// Ensures "已清空" strictly contains tasks intentionally cleared by the user.
 export function cleanupDuplicateTasks(data: AppData): AppData {
   const seen = new Map<string, Task>();
-  const toArchive = new Set<string>();
+  const toDelete = new Set<string>();
 
   const openCustom = data.tasks.filter(
     (t) => !isGenerated(t) && t.status === "open",
@@ -872,26 +882,48 @@ export function cleanupDuplicateTasks(data: AppData): AppData {
       continue;
     }
     if (existing.dueDate && !task.dueDate) {
-      toArchive.add(task.id);
+      toDelete.add(task.id);
     } else if (!existing.dueDate && task.dueDate) {
-      toArchive.add(existing.id);
+      toDelete.add(existing.id);
       seen.set(key, task);
     } else {
-      toArchive.add(task.id);
+      toDelete.add(task.id);
     }
   }
 
-  if (toArchive.size === 0) return data;
+  // 1. 清理历史上由系统跨周自动标记为 archived 的生成任务（保证已清空只包含用户手动清空的任务）
+  for (const task of data.tasks) {
+    if (isGenerated(task) && task.status === "archived") {
+      toDelete.add(task.id);
+    }
+  }
+
+  // 2. 清理历史上因去重被标记为 archived 的重复副本（与现有 open 任务同分类同名的 archived 副本）
+  const openKeys = new Set(
+    data.tasks
+      .filter(
+        (t) => !isGenerated(t) && t.status === "open" && !toDelete.has(t.id),
+      )
+      .map((t) => `${t.category}:${t.title.trim().toLowerCase()}`),
+  );
+  for (const task of data.tasks) {
+    if (!isGenerated(task) && task.status === "archived") {
+      const key = `${task.category}:${task.title.trim().toLowerCase()}`;
+      if (openKeys.has(key)) {
+        toDelete.add(task.id);
+      }
+    }
+  }
+
+  if (toDelete.size === 0) return data;
 
   return {
     ...data,
-    tasks: data.tasks.map((t) =>
-      toArchive.has(t.id) ? { ...t, status: "archived" } : t,
-    ),
+    tasks: data.tasks.filter((t) => !toDelete.has(t.id)),
     daily: Object.fromEntries(
       Object.entries(data.daily).map(([day, ids]) => [
         day,
-        ids.filter((id) => !toArchive.has(id)),
+        ids.filter((id) => !toDelete.has(id)),
       ]),
     ),
   };

@@ -500,21 +500,15 @@ test("a new week clears last week's open generated tasks but keeps records", () 
   data = completeTask(data, auto("resume", 1), day);
   data = saveTask(data, task("mine"), day);
   const next = ensureWeek(data, "2026-10-19");
-  const status = (id) => next.tasks.find((t) => t.id === id).status;
+  const status = (id) => next.tasks.find((t) => t.id === id)?.status;
   assert.equal(status(auto("resume", 1)), "done");
-  assert.equal(status(auto("resume", 2)), "archived");
-  assert.equal(status(auto("cantonese", 2)), "archived");
+  // Uncompleted weekly generated tasks are removed instead of polluting "已清空"
+  assert.equal(next.tasks.find((t) => t.id === auto("resume", 2)), undefined);
+  assert.equal(next.tasks.find((t) => t.id === auto("cantonese", 2)), undefined);
   assert.equal(status("mine"), "open");
   assert.equal(next.tasks.filter((t) => t.plannedWeek === "2026-10-19").length, 8);
   assert.equal(balance(next), balance(data));
   assert.equal(validateData(next), true);
-  const restored = {
-    ...next,
-    tasks: next.tasks.map((t) =>
-      t.id === auto("resume", 2) ? { ...t, status: "open" } : t,
-    ),
-  };
-  assert.equal(ensureWeek(restored, "2026-10-20"), restored);
 });
 test("daily plan: P0 tasks first, then P1 series and ordinary tasks", () => {
   let data = ensureWeek(dataWith(task("a", "none", 1, { priority: 0 }), task("b")), day);
@@ -1233,7 +1227,7 @@ test("dailyTasks auto-fills uncompleted ordinary tasks carried over from past we
   assert.ok(picked.some((t) => t.id === "old_review"));
 });
 
-test("cleanupDuplicateTasks archives duplicate open custom tasks favoring the one with a deadline", () => {
+test("cleanupDuplicateTasks removes duplicate open custom tasks and legacy archived clutter", () => {
   const taskWithDdl = task("cs_with_ddl", "none", 1, {
     title: "CS5187 Assign1",
     category: "course",
@@ -1255,10 +1249,42 @@ test("cleanupDuplicateTasks archives duplicate open custom tasks favoring the on
 
   // The one with deadline remains open
   assert.equal(cleaned.tasks.find((t) => t.id === "cs_with_ddl").status, "open");
-  // The one without deadline is archived
-  assert.equal(cleaned.tasks.find((t) => t.id === "cs_no_ddl").status, "archived");
+  // The duplicate one without deadline is deleted (not archived to pollute "已清空")
+  assert.equal(cleaned.tasks.find((t) => t.id === "cs_no_ddl"), undefined);
   // Distinct task remains open
   assert.equal(cleaned.tasks.find((t) => t.id === "cs_review").status, "open");
+
+  // Also purges legacy auto-archived generated tasks and duplicate archived tasks, while keeping genuine user-cleared tasks
+  const legacyArchivedGen = task("auto:2026-10-12:resume:1", "resume", 5, {
+    title: "香港秋招简历x5",
+    status: "archived",
+  });
+  const legacyArchivedDup = task("cs_dup_archived", "none", 1, {
+    title: "CS5187 Assign1",
+    category: "course",
+    status: "archived",
+  });
+  const userClearedTask = task("real_cleared", "none", 1, {
+    title: "买水果",
+    category: "course",
+    status: "archived",
+  });
+  const dataWithLegacy = dataWith(
+    taskWithDdl,
+    legacyArchivedGen,
+    legacyArchivedDup,
+    userClearedTask,
+  );
+  const purged = cleanupDuplicateTasks(dataWithLegacy);
+  assert.equal(
+    purged.tasks.find((t) => t.id === "auto:2026-10-12:resume:1"),
+    undefined,
+  );
+  assert.equal(purged.tasks.find((t) => t.id === "cs_dup_archived"), undefined);
+  assert.equal(
+    purged.tasks.find((t) => t.id === "real_cleared").status,
+    "archived",
+  );
 
   // Generated tasks with identical titles are never deduplicated
   const gen1 = task("auto:2026-10-19:resume:1", "resume", 5, {
