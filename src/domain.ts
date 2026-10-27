@@ -629,7 +629,9 @@ export function setInterviewSteps(
   return {
     ...data,
     tasks: data.tasks.map((item) =>
-      item.id === taskId ? { ...item, steps } : item,
+      item.id === taskId
+        ? { ...item, steps: steps.length > 0 ? steps : undefined }
+        : item,
     ),
   };
 }

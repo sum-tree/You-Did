@@ -12,7 +12,6 @@ import {
   X,
 } from "lucide-react";
 import {
-  addDays,
   archiveTasks,
   balance,
   buildInterviewSteps,
@@ -20,10 +19,8 @@ import {
   chooseDaily,
   dailyTasks,
   localDate,
-  moveTasks,
   normalizeData,
   setInterviewSteps,
-  shouldSuggestInterviewSplit,
   uncompleteTask,
   upgradeData,
   weekStart,
@@ -85,13 +82,11 @@ export function TaskMenuSheet({
               编辑任务 / 修改DDL
               <ArrowRight size={17} />
             </button>
-            {task.kind === "interview" && onSplit && (
+            {onSplit && (
               <button onClick={() => onSplit(task, base)}>
                 {task.steps && task.steps.length > 0
-                  ? "调整面试准备小步"
-                  : shouldSuggestInterviewSplit(task, today)
-                    ? "逾期建议：拆成小步准备"
-                    : "拆成小步准备"}
+                  ? "调整拆解步骤"
+                  : "拆解任务"}
                 <ArrowRight size={17} />
               </button>
             )}
@@ -124,22 +119,6 @@ export function TaskMenuSheet({
               {inToday ? "从今日移出" : "加入今日"}
               <ArrowRight size={17} />
             </button>
-            {task.plannedWeek < addDays(weekStart(today), 7) && (
-              <button
-                onClick={async () => {
-                  const result = await update(
-                    (previous) => moveTasks(previous, [task.id], localDate()),
-                    base,
-                  );
-                  if (!result) return;
-                  close();
-                  notify("已移至下周，已获积分保留。");
-                }}
-              >
-                移至下周
-                <ArrowRight size={17} />
-              </button>
-            )}
             <button
               onClick={async () => {
                 const result = await update(
@@ -564,16 +543,20 @@ export function InterviewSplitSheet({
   >(() => {
     if (task.steps && task.steps.length > 0) {
       if (task.steps.some((s) => s.title.includes("视频"))) return "video";
-      return "interview";
+      if (task.kind === "interview" && task.steps.length === 11) return "interview";
+      return "custom";
     }
-    return "interview";
+    return task.kind === "interview" ? "interview" : "custom";
   });
 
   const [steps, setSteps] = useState<InterviewStep[]>(() => {
     if (task.steps && task.steps.length > 0) {
       return task.steps;
     }
-    return buildInterviewSteps("interview");
+    if (task.kind === "interview") {
+      return buildInterviewSteps("interview");
+    }
+    return [];
   });
 
   const [newTitle, setNewTitle] = useState("");
@@ -626,9 +609,13 @@ export function InterviewSplitSheet({
   };
 
   return (
-    <Modal {...sync} title="拆成小步准备" close={close}>
+    <Modal
+      {...sync}
+      title={task.steps && task.steps.length > 0 ? "调整拆解步骤" : "拆解任务"}
+      close={close}
+    >
       <p className="form-note">
-        可选用 PRD 标准 11 步模板（面试或录视频），或自由编辑与拖动调整。各小步不计单独卡拉米，全部完成后自动完成原面试任务并结算奖励。
+        可选用标准模板（面试或录视频），或自由编辑、拖动与新增自定义小步。各小步不计单独卡拉米，全部完成后自动完成原任务并结算奖励。
       </p>
       <div className="split-form">
         <div className="split-template-group">
@@ -660,85 +647,94 @@ export function InterviewSplitSheet({
 
         <div className="steps-editor-list">
           <h4>步骤清单（可编辑、拖动排序或删除）：</h4>
-          {steps.map((step, idx) => (
-            <div
-              key={step.id}
-              data-step-index={idx}
-              className={`step-card-row ${dragIndex === idx ? "is-dragging" : ""}`}
-              draggable
-              onDragStart={(e) => {
-                e.dataTransfer.effectAllowed = "move";
-                setDragIndex(idx);
-              }}
-              onDragOver={(e) => {
-                e.preventDefault();
-                e.dataTransfer.dropEffect = "move";
-              }}
-              onDrop={(e) => {
-                e.preventDefault();
-                if (dragIndex !== null && dragIndex !== idx) {
-                  moveStep(dragIndex, idx);
-                }
-                setDragIndex(null);
-              }}
-              onDragEnd={() => setDragIndex(null)}
+          {steps.length === 0 ? (
+            <p
+              className="form-note"
+              style={{ textAlign: "center", padding: "12px 0" }}
             >
-              <div className="step-input-card">
-                <input
-                  type="text"
-                  value={step.title}
-                  maxLength={200}
-                  aria-label={`步骤 ${idx + 1}`}
-                  onChange={(e) => handleTitleChange(step.id, e.target.value)}
-                />
+              暂无步骤，可在下方输入小步并点击添加，或选用上方预设模板
+            </p>
+          ) : (
+            steps.map((step, idx) => (
+              <div
+                key={step.id}
+                data-step-index={idx}
+                className={`step-card-row ${dragIndex === idx ? "is-dragging" : ""}`}
+                draggable
+                onDragStart={(e) => {
+                  e.dataTransfer.effectAllowed = "move";
+                  setDragIndex(idx);
+                }}
+                onDragOver={(e) => {
+                  e.preventDefault();
+                  e.dataTransfer.dropEffect = "move";
+                }}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  if (dragIndex !== null && dragIndex !== idx) {
+                    moveStep(dragIndex, idx);
+                  }
+                  setDragIndex(null);
+                }}
+                onDragEnd={() => setDragIndex(null)}
+              >
+                <div className="step-input-card">
+                  <input
+                    type="text"
+                    value={step.title}
+                    maxLength={200}
+                    aria-label={`步骤 ${idx + 1}`}
+                    onChange={(e) => handleTitleChange(step.id, e.target.value)}
+                  />
+                  <button
+                    type="button"
+                    className="drag-handle-btn"
+                    aria-label={`拖动调整步骤 ${idx + 1} 顺序`}
+                    title="按住拖动调整顺序"
+                    onTouchStart={(e) => {
+                      const touch = e.touches[0];
+                      touchStartY.current = touch.clientY;
+                      touchCurrentIndex.current = idx;
+                      setDragIndex(idx);
+                    }}
+                    onTouchMove={(e) => {
+                      const touch = e.touches[0];
+                      const target = document.elementFromPoint(
+                        touch.clientX,
+                        touch.clientY,
+                      );
+                      const row = target?.closest("[data-step-index]");
+                      if (row) {
+                        const targetIdx = Number(
+                          row.getAttribute("data-step-index"),
+                        );
+                        if (
+                          !Number.isNaN(targetIdx) &&
+                          targetIdx !== touchCurrentIndex.current
+                        ) {
+                          moveStep(touchCurrentIndex.current, targetIdx);
+                          touchCurrentIndex.current = targetIdx;
+                          setDragIndex(targetIdx);
+                        }
+                      }
+                    }}
+                    onTouchEnd={() => setDragIndex(null)}
+                    onTouchCancel={() => setDragIndex(null)}
+                  >
+                    <Menu size={16} />
+                  </button>
+                </div>
                 <button
                   type="button"
-                  className="drag-handle-btn"
-                  aria-label={`拖动调整步骤 ${idx + 1} 顺序`}
-                  title="按住拖动调整顺序"
-                  onTouchStart={(e) => {
-                    const touch = e.touches[0];
-                    touchStartY.current = touch.clientY;
-                    touchCurrentIndex.current = idx;
-                    setDragIndex(idx);
-                  }}
-                  onTouchMove={(e) => {
-                    const touch = e.touches[0];
-                    const target = document.elementFromPoint(
-                      touch.clientX,
-                      touch.clientY,
-                    );
-                    const row = target?.closest("[data-step-index]");
-                    if (row) {
-                      const targetIdx = Number(
-                        row.getAttribute("data-step-index"),
-                      );
-                      if (
-                        !Number.isNaN(targetIdx) &&
-                        targetIdx !== touchCurrentIndex.current
-                      ) {
-                        moveStep(touchCurrentIndex.current, targetIdx);
-                        touchCurrentIndex.current = targetIdx;
-                        setDragIndex(targetIdx);
-                      }
-                    }
-                  }}
-                  onTouchEnd={() => setDragIndex(null)}
-                  onTouchCancel={() => setDragIndex(null)}
+                  className="delete-step-btn"
+                  aria-label={`删除步骤 ${idx + 1}`}
+                  onClick={() => handleDelete(step.id)}
                 >
-                  <Menu size={16} />
+                  <X size={18} />
                 </button>
               </div>
-              <button
-                type="button"
-                className="delete-step-btn"
-                aria-label={`删除步骤 ${idx + 1}`}
-                onClick={() => handleDelete(step.id)}
-              >
-                <X size={18} />
-              </button>
-            </div>
-          ))}
+            ))
+          )}
 
           <div className="add-step-card">
             <input
@@ -772,7 +768,17 @@ export function InterviewSplitSheet({
         onClick={async () => {
           const validSteps = steps.filter((s) => s.title.trim() !== "");
           if (validSteps.length === 0) {
-            notify("请至少保留一个准备步骤。");
+            if (task.steps && task.steps.length > 0) {
+              const result = await update(
+                (previous) => setInterviewSteps(previous, task.id, []),
+                base,
+              );
+              if (!result) return;
+              close();
+              notify("已清除拆解步骤，恢复为普通任务。");
+              return;
+            }
+            notify("请先添加至少一个拆解步骤。");
             return;
           }
           const result = await update(

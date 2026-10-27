@@ -106,7 +106,6 @@ export function DailyPage({
                         {dateLabel(task.dueDate, today)}
                       </span>
                     )}
-                    <span className="priority">P{task.priority}</span>
                   </div>
                   {taskRewardHint(task, today) && (
                     <p className="reward-hint">{taskRewardHint(task, today)}</p>
@@ -151,7 +150,7 @@ export function DailyPage({
                       {isSubmenuOpen && (
                         <div className="interview-submenu-box">
                           <div className="interview-submenu-header">
-                            <span className="submenu-title">细分准备步骤</span>
+                            <span className="submenu-title">细分步骤</span>
                             {onOpenSplit && !done && (
                               <button
                                 type="button"

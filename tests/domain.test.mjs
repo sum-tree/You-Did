@@ -993,6 +993,35 @@ test("tasks with steps survive validateData and normalizeData", () => {
   assert.equal(normalized.tasks[0].steps.length, 10);
 });
 
+test("any task can be decomposed into custom steps and cleared", () => {
+  const ordinary = task("hw-1", "course", 1, { title: "课程作业3" });
+  let data = dataWith(ordinary);
+  const steps = [
+    { id: "s1", title: "阅读章节", done: false },
+    { id: "s2", title: "编写代码", done: false },
+  ];
+  data = setInterviewSteps(data, "hw-1", steps);
+  assert.equal(data.tasks[0].steps.length, 2);
+
+  // Toggle step 1
+  data = toggleInterviewStep(data, "hw-1", "s1", day);
+  assert.equal(data.tasks[0].status, "open");
+  assert.equal(data.tasks[0].steps[0].done, true);
+  assert.equal(balance(data), 0);
+
+  // Toggle step 2 -> complete ordinary course task (awards course reward: 1)
+  data = toggleInterviewStep(data, "hw-1", "s2", day);
+  assert.equal(data.tasks[0].status, "done");
+  assert.equal(balance(data), 1);
+
+  // Clearing steps on an open task removes steps field
+  let openData = dataWith(ordinary);
+  openData = setInterviewSteps(openData, "hw-1", steps);
+  assert.equal(openData.tasks[0].steps.length, 2);
+  openData = setInterviewSteps(openData, "hw-1", []);
+  assert.equal(openData.tasks[0].steps, undefined);
+});
+
 test("monthBalance accurately computes balance strictly for a given month", () => {
   const data = {
     ...emptyData(),

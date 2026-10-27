@@ -191,21 +191,29 @@ export function PoolPage({
                         {task.steps.length})
                       </span>
                     )}
-                    {task.kind === "interview" &&
-                      task.status === "open" &&
-                      onOpenSplit && (
+                    {task.status === "open" &&
+                      onOpenSplit &&
+                      (task.steps && task.steps.length > 0 ? (
                         <button
                           className="text-button"
                           onClick={() => onOpenSplit(task)}
                         >
-                          {task.steps && task.steps.length > 0
-                            ? "调整准备小步"
-                            : shouldSuggestInterviewSplit(task, today)
-                              ? "逾期建议：拆成小步准备"
-                              : "拆成小步准备"}
+                          调整拆解步骤
                           <ArrowRight size={14} />
                         </button>
-                      )}
+                      ) : (
+                        task.kind === "interview" && (
+                          <button
+                            className="text-button"
+                            onClick={() => onOpenSplit(task)}
+                          >
+                            {shouldSuggestInterviewSplit(task, today)
+                              ? "逾期建议：拆成小步准备"
+                              : "拆成小步准备"}
+                            <ArrowRight size={14} />
+                          </button>
+                        )
+                      ))}
                     <button
                       className="text-button"
                       onClick={() => onMenu(task)}
