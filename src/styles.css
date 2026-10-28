@@ -2151,3 +2151,207 @@ main {
   border-color: #556247;
 }
 
+/* Cantonese Practice Timer */
+.cantonese-timer-block {
+  margin-top: 10px;
+  background: #fbfcf8;
+  border: 1px solid #e5ecd8;
+  border-radius: 10px;
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.cantonese-timer-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.cantonese-timer-time {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  color: #2e3b25;
+}
+
+.cantonese-timer-time .timer-icon {
+  color: #6a7c5c;
+  align-self: center;
+}
+
+.cantonese-timer-time .timer-icon.running {
+  color: #3b7c25;
+  animation: pulse-timer 1.5s ease-in-out infinite;
+}
+
+@keyframes pulse-timer {
+  0% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.15); opacity: 0.8; }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+.timer-digits {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: -0.5px;
+  color: #24351a;
+}
+
+.timer-target {
+  font-size: 12px;
+  color: #88967e;
+  font-family: var(--font-mono, ui-monospace, monospace);
+}
+
+.cantonese-tier-badge {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 12px;
+  border: 1px solid transparent;
+}
+
+.cantonese-tier-badge.tier-0 {
+  background: #f0f3eb;
+  color: #728169;
+  border-color: #e2e8da;
+}
+
+.cantonese-tier-badge.tier-1 {
+  background: #eef7e6;
+  color: #457829;
+  border-color: #d1e8c2;
+}
+
+.cantonese-tier-badge.tier-2 {
+  background: #e4f3d8;
+  color: #366d1f;
+  border-color: #bfe0a9;
+}
+
+.cantonese-tier-badge.tier-3 {
+  background: #d8eed0;
+  color: #285e13;
+  font-weight: 700;
+  border-color: #aed996;
+}
+
+.cantonese-timer-track {
+  position: relative;
+  height: 6px;
+  background: #e8eee0;
+  border-radius: 3px;
+  overflow: visible;
+  margin: 2px 0;
+}
+
+.cantonese-timer-progress {
+  height: 100%;
+  background: linear-gradient(90deg, #6c9c4b 0%, #3f7b24 100%);
+  border-radius: 3px;
+  transition: width 0.3s ease;
+}
+
+.cantonese-marker {
+  position: absolute;
+  top: -2px;
+  bottom: -2px;
+  width: 2px;
+  background: #b6c6aa;
+  border-radius: 1px;
+}
+
+.cantonese-marker.marker-10 {
+  left: 33.333%;
+}
+
+.cantonese-marker.marker-20 {
+  left: 66.666%;
+}
+
+.cantonese-timer-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 2px;
+}
+
+.timer-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 10px;
+  font-size: 12px;
+  font-weight: 600;
+  border-radius: 6px;
+  border: 1px solid transparent;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.timer-btn-primary {
+  background: #3b6d21;
+  color: #ffffff;
+}
+
+.timer-btn-primary:hover {
+  background: #315c1b;
+}
+
+.timer-btn-secondary {
+  background: #edf3e7;
+  color: #3b5030;
+  border-color: #d2dfc7;
+}
+
+.timer-btn-secondary:hover {
+  background: #e3eed9;
+}
+
+.timer-btn-success {
+  background: #2f6b1b;
+  color: #ffffff;
+}
+
+.timer-btn-success:hover:not(:disabled) {
+  background: #275916;
+}
+
+.timer-btn-success:disabled {
+  background: #e2e8dc;
+  color: #929f8c;
+  cursor: not-allowed;
+  opacity: 0.7;
+}
+
+.timer-btn-ghost {
+  background: transparent;
+  color: #718168;
+  padding: 5px 6px;
+}
+
+.timer-btn-ghost:hover {
+  color: #3b4e31;
+  background: #edf2e7;
+}
+
+.cantonese-timer-tip {
+  font-size: 11px;
+  color: #73826a;
+  line-height: 1.4;
+  margin: 0;
+}
+
+.cantonese-completed-summary {
+  margin-top: 6px;
+  font-size: 12px;
+  color: #386422;
+  background: #f1f7ec;
+  border: 1px solid #d8e7cf;
+  border-radius: 6px;
+  padding: 4px 8px;
+}
+

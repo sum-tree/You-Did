@@ -1,6 +1,20 @@
-import { useState } from "react";
-import { ChevronRight, Ellipsis, Settings2 } from "lucide-react";
-import { CATEGORY, dailyView, shouldSuggestInterviewSplit } from "../domain.ts";
+import { useEffect, useState } from "react";
+import {
+  Check,
+  ChevronRight,
+  Ellipsis,
+  Pause,
+  Play,
+  RotateCcw,
+  Settings2,
+  Timer,
+} from "lucide-react";
+import {
+  CATEGORY,
+  dailyView,
+  shouldSuggestInterviewSplit,
+  taskReward,
+} from "../domain.ts";
 import type { AppData, Task } from "../domain.ts";
 import {
   dateLabel,
@@ -10,6 +24,206 @@ import {
   TaskCheck,
   taskRewardHint,
 } from "../components.tsx";
+
+interface CantoneseTimerState {
+  running: boolean;
+  startedAt: number | null;
+  baseElapsed: number;
+}
+
+function getSavedCantoneseTimer(taskId: string): CantoneseTimerState {
+  try {
+    const raw = localStorage.getItem(`yd_cantonese_timer_${taskId}`);
+    if (raw) return JSON.parse(raw);
+  } catch {}
+  return { running: false, startedAt: null, baseElapsed: 0 };
+}
+
+function saveCantoneseTimer(taskId: string, state: CantoneseTimerState | null) {
+  try {
+    if (!state) {
+      localStorage.removeItem(`yd_cantonese_timer_${taskId}`);
+    } else {
+      localStorage.setItem(`yd_cantonese_timer_${taskId}`, JSON.stringify(state));
+    }
+  } catch {}
+}
+
+function CantoneseTimer({
+  task,
+  onFinish,
+}: {
+  task: Task;
+  onFinish: (task: Task, duration: number) => void;
+}) {
+  const [timerState, setTimerState] = useState<CantoneseTimerState>(() =>
+    getSavedCantoneseTimer(task.id),
+  );
+  const [now, setNow] = useState(() => Date.now());
+
+  const elapsed = Math.min(
+    1800,
+    timerState.baseElapsed +
+      (timerState.running && timerState.startedAt
+        ? Math.max(0, Math.floor((now - timerState.startedAt) / 1000))
+        : 0),
+  );
+
+  useEffect(() => {
+    if (elapsed >= 1800 && timerState.running) {
+      saveCantoneseTimer(task.id, null);
+      setTimerState({ running: false, startedAt: null, baseElapsed: 1800 });
+      onFinish(task, 1800);
+    }
+  }, [elapsed, timerState.running, task, onFinish]);
+
+  useEffect(() => {
+    if (!timerState.running) return;
+    const interval = setInterval(() => {
+      setNow(Date.now());
+    }, 500);
+    return () => clearInterval(interval);
+  }, [timerState.running]);
+
+  const handleStart = () => {
+    const nextState: CantoneseTimerState = {
+      running: true,
+      startedAt: Date.now(),
+      baseElapsed: elapsed >= 1800 ? 0 : elapsed,
+    };
+    saveCantoneseTimer(task.id, nextState);
+    setTimerState(nextState);
+    setNow(Date.now());
+  };
+
+  const handlePause = () => {
+    const nextState: CantoneseTimerState = {
+      running: false,
+      startedAt: null,
+      baseElapsed: elapsed,
+    };
+    saveCantoneseTimer(task.id, nextState);
+    setTimerState(nextState);
+  };
+
+  const handleReset = () => {
+    saveCantoneseTimer(task.id, null);
+    setTimerState({ running: false, startedAt: null, baseElapsed: 0 });
+    setNow(Date.now());
+  };
+
+  const handleSettle = () => {
+    if (elapsed < 600) return;
+    saveCantoneseTimer(task.id, null);
+    onFinish(task, elapsed);
+  };
+
+  const mins = Math.floor(elapsed / 60);
+  const secs = elapsed % 60;
+  const timeStr = `${String(mins).padStart(2, "0")}:${String(secs).padStart(2, "0")}`;
+  const progressPercent = Math.min(100, Math.round((elapsed / 1800) * 100));
+  const currentTier = Math.min(3, Math.floor(mins / 10));
+
+  return (
+    <div className="cantonese-timer-block">
+      <div className="cantonese-timer-header">
+        <div className="cantonese-timer-time">
+          <Timer
+            size={16}
+            className={timerState.running ? "timer-icon running" : "timer-icon"}
+          />
+          <span className="timer-digits">{timeStr}</span>
+          <span className="timer-target">/ 30:00</span>
+        </div>
+        <div className={`cantonese-tier-badge tier-${currentTier}`}>
+          {currentTier === 0 ? "满10分得1卡拉米" : `当前可得 ${currentTier} 卡拉米`}
+          {currentTier === 3 && " · 计周目标"}
+        </div>
+      </div>
+
+      <div className="cantonese-timer-track">
+        <div
+          className="cantonese-timer-progress"
+          style={{ width: `${progressPercent}%` }}
+        />
+        <div className="cantonese-marker marker-10" title="10分钟 (1卡拉米)" />
+        <div className="cantonese-marker marker-20" title="20分钟 (2卡拉米)" />
+      </div>
+
+      <div className="cantonese-timer-controls">
+        {!timerState.running && elapsed === 0 && (
+          <button
+            type="button"
+            className="timer-btn timer-btn-primary"
+            onClick={handleStart}
+          >
+            <Play size={14} /> 开始练习计时
+          </button>
+        )}
+
+        {timerState.running && (
+          <>
+            <button
+              type="button"
+              className="timer-btn timer-btn-secondary"
+              onClick={handlePause}
+            >
+              <Pause size={14} /> 暂停
+            </button>
+            <button
+              type="button"
+              className="timer-btn timer-btn-success"
+              disabled={elapsed < 600}
+              onClick={handleSettle}
+              title={elapsed < 600 ? "需满 10 分钟方可结算" : "结算当前卡拉米奖励"}
+            >
+              <Check size={14} />
+              {elapsed < 600 ? "需满10分结算" : `结束并结算 (+${currentTier}卡拉米)`}
+            </button>
+          </>
+        )}
+
+        {!timerState.running && elapsed > 0 && (
+          <>
+            <button
+              type="button"
+              className="timer-btn timer-btn-primary"
+              onClick={handleStart}
+            >
+              <Play size={14} /> 继续
+            </button>
+            <button
+              type="button"
+              className="timer-btn timer-btn-success"
+              disabled={elapsed < 600}
+              onClick={handleSettle}
+              title={elapsed < 600 ? "需满 10 分钟方可结算" : "结算当前卡拉米奖励"}
+            >
+              <Check size={14} />
+              {elapsed < 600 ? "需满10分结算" : `结束并结算 (+${currentTier}卡拉米)`}
+            </button>
+            <button
+              type="button"
+              className="timer-btn timer-btn-ghost"
+              onClick={handleReset}
+              title="重置计时"
+            >
+              <RotateCcw size={14} /> 重置
+            </button>
+          </>
+        )}
+      </div>
+
+      <p className="cantonese-timer-tip">
+        {elapsed < 600
+          ? "每满 10 分钟得 1 卡拉米；练满 30 分钟得 3 卡拉米并计入周目标（超30分钟自动关闭并按30分钟结算）"
+          : elapsed < 1800
+            ? `已练习 ${mins} 分钟，当前可结算 +${currentTier} 卡拉米；继续练满 30 分钟可得 3 卡拉米并达成周目标`
+            : "已达到 30 分钟上限，已自动为您关闭计时并结算 3 卡拉米！"}
+      </p>
+    </div>
+  );
+}
 
 export function DailyPage({
   data,
@@ -23,7 +237,7 @@ export function DailyPage({
 }: {
   data: AppData;
   today: string;
-  onFinish: (task: Task) => void;
+  onFinish: (task: Task, duration?: number) => void;
   onMenu: (task: Task) => void;
   onArrange: () => void;
   onTodo: () => void;
@@ -107,8 +321,23 @@ export function DailyPage({
                       </span>
                     )}
                   </div>
-                  {taskRewardHint(task, today) && (
+                  {task.kind !== "cantonese" && taskRewardHint(task, today) && (
                     <p className="reward-hint">{taskRewardHint(task, today)}</p>
+                  )}
+                  {task.kind === "cantonese" && !done && (
+                    <CantoneseTimer task={task} onFinish={onFinish} />
+                  )}
+                  {task.kind === "cantonese" && done && (
+                    <div className="cantonese-completed-summary">
+                      {task.duration !== undefined ? (
+                        <>
+                          ⏱️ 练习时长 <strong>{Math.floor(task.duration / 60)}</strong> 分钟 · 获得 <strong>{taskReward(task, today)}</strong> 卡拉米
+                          {task.duration >= 1800 ? "（已达成周目标）" : "（未满30分未计入周目标）"}
+                        </>
+                      ) : (
+                        <>已完成 · 获得 <strong>{taskReward(task, today)}</strong> 卡拉米</>
+                      )}
+                    </div>
                   )}
                   {hasSteps && (
                     <div className="interview-steps-block">

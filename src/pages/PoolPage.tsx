@@ -39,6 +39,14 @@ type Row =
   | { key: string; series: keyof typeof SERIES_NAME; tasks: Task[] };
 const rowPriority = (row: Row) =>
   "task" in row ? row.task.priority : Math.min(...row.tasks.map((t) => t.priority));
+const rowKind = (row: Row) => ("task" in row ? row.task.kind : row.series);
+const rowSpeechRank = (a: Row, b: Row) => {
+  const ka = rowKind(a);
+  const kb = rowKind(b);
+  if (ka === "cantonese" && kb === "english") return -1;
+  if (ka === "english" && kb === "cantonese") return 1;
+  return 0;
+};
 const rowDue = (row: Row) => ("task" in row ? row.task.dueDate : "") || "9999";
 const rowCreated = (row: Row) =>
   "task" in row ? row.task.createdAt : row.tasks[0].createdAt;
@@ -83,6 +91,7 @@ export function PoolPage({
   rows.sort(
     (a, b) =>
       rowPriority(a) - rowPriority(b) ||
+      rowSpeechRank(a, b) ||
       rowDue(a).localeCompare(rowDue(b)) ||
       rowCreated(a).localeCompare(rowCreated(b)),
   );

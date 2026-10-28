@@ -483,11 +483,11 @@ test("each week generates the eight fixed tasks once", () => {
       [auto("resume", 1), "香港秋招简历x5", "resume", 5, day],
       [auto("resume", 2), "香港秋招简历x5", "resume", 5, day],
       [auto("resume", 3), "香港秋招简历x5", "resume", 5, day],
+      [auto("cantonese", 1), "粤语30分钟", "cantonese", 1, day],
+      [auto("cantonese", 2), "粤语30分钟", "cantonese", 1, day],
       [auto("english", 1), "英语面试练习3题", "english", 3, day],
       [auto("english", 2), "英语面试练习3题", "english", 3, day],
       [auto("english", 3), "英语面试练习3题", "english", 3, day],
-      [auto("cantonese", 1), "粤语30分钟", "cantonese", 1, day],
-      [auto("cantonese", 2), "粤语30分钟", "cantonese", 1, day],
     ],
   );
   assert.equal(ensureWeek(data, "2026-10-18"), data);
@@ -514,12 +514,12 @@ test("daily plan: P0 tasks first, then P1 series and ordinary tasks", () => {
   let data = ensureWeek(dataWith(task("a", "none", 1, { priority: 0 }), task("b")), day);
   assert.deepEqual(
     dailyTasks(data, day).map((t) => t.id),
-    ["a", auto("resume", 1), auto("english", 1)],
+    ["a", auto("resume", 1), auto("cantonese", 1)],
   );
   data = ensureWeek(emptyData(), day);
   assert.deepEqual(
     dailyTasks(data, day).map((t) => t.id),
-    [auto("resume", 1), auto("english", 1)],
+    [auto("resume", 1), auto("cantonese", 1)],
   );
 });
 test("daily tasks always sorted by priority P0-P2 regardless of manual addition order", () => {
@@ -534,22 +534,22 @@ test("daily tasks always sorted by priority P0-P2 regardless of manual addition 
     ["p0_task", "p1_task", "p2_task"],
   );
 });
-test("each series appears once a day and Cantonese waits for English", () => {
+test("each series appears once a day and English waits for Cantonese", () => {
   let data = ensureWeek(emptyData(), day);
-  data = finishAll(data, [auto("resume", 1), auto("english", 1)]);
+  data = finishAll(data, [auto("resume", 1), auto("cantonese", 1)]);
   assert.deepEqual(dailyTasks(data, day), []);
   assert.deepEqual(
     dailyView(data, day).map((t) => t.id),
-    [auto("resume", 1), auto("english", 1)],
+    [auto("resume", 1), auto("cantonese", 1)],
   );
   assert.deepEqual(
     dailyTasks(data, nextDay).map((t) => t.id),
-    [auto("resume", 2), auto("english", 2)],
+    [auto("resume", 2), auto("cantonese", 2)],
   );
-  data = finishAll(data, [auto("english", 2), auto("english", 3)], nextDay);
+  data = finishAll(data, [auto("cantonese", 2)], nextDay);
   assert.deepEqual(
     dailyTasks(data, "2026-10-14").map((t) => t.id),
-    [auto("resume", 2), auto("cantonese", 1)],
+    [auto("resume", 2), auto("english", 1)],
   );
 });
 test("resume stays guaranteed when ordinary tasks are overdue", () => {
@@ -747,8 +747,8 @@ test("generated tasks report their series and todo display name", () => {
   const data = ensureWeek(emptyData(), day);
   const names = data.tasks.map((t) => [generatedSeries(t), SERIES_NAME[generatedSeries(t)]]);
   assert.deepEqual(names[0], ["resume", "香港秋招简历投递"]);
-  assert.deepEqual(names[3], ["english", "英语口语练习"]);
-  assert.deepEqual(names[6], ["cantonese", "粤语口语练习"]);
+  assert.deepEqual(names[3], ["cantonese", "粤语口语练习"]);
+  assert.deepEqual(names[5], ["english", "英语口语练习"]);
   assert.equal(generatedSeries(task("mine", "resume", 5)), undefined);
 });
 
@@ -1367,8 +1367,45 @@ test("ensureWeek automatically updates lagging courseWeek to current week and ad
   assert.equal(customNextWeek.courseWeek, 8);
 });
 
+test("cantonese timer awards tiered kalami and only 30-min counts toward weekly goal", () => {
+  const cTask = auto("cantonese", 1);
+  let data = ensureWeek(emptyData(), day);
 
+  // Less than 10 mins: cannot complete (no reward)
+  const shortRun = completeTask(data, cTask, day, 500);
+  assert.equal(shortRun.tasks.find((t) => t.id === cTask).status, "open");
 
+  // 10-19 mins: 1 kalami, 0 amount towards weekly goal
+  const tenMins = completeTask(data, cTask, day, 600);
+  assert.equal(balance(tenMins), 1);
+  assert.equal(tenMins.tasks.find((t) => t.id === cTask).status, "done");
+  assert.equal(tenMins.tasks.find((t) => t.id === cTask).duration, 600);
+  assert.equal(tenMins.tasks.find((t) => t.id === cTask).amount, 0);
+  assert.equal(tenMins.completions.find((c) => c.taskId === cTask).amount, 0);
+  assert.equal(validateData(tenMins), true);
 
+  // 20-29 mins: 2 kalami, 0 amount towards weekly goal
+  const twentyMins = completeTask(data, cTask, day, 1200);
+  assert.equal(balance(twentyMins), 2);
+  assert.equal(twentyMins.tasks.find((t) => t.id === cTask).duration, 1200);
+  assert.equal(twentyMins.tasks.find((t) => t.id === cTask).amount, 0);
+  assert.equal(validateData(twentyMins), true);
+
+  // 30 mins: 3 kalami, 1 amount towards weekly goal
+  const thirtyMins = completeTask(data, cTask, day, 1800);
+  assert.equal(balance(thirtyMins), 3);
+  assert.equal(thirtyMins.tasks.find((t) => t.id === cTask).duration, 1800);
+  assert.equal(thirtyMins.tasks.find((t) => t.id === cTask).amount, 1);
+  assert.equal(thirtyMins.completions.find((c) => c.taskId === cTask).amount, 1);
+  assert.equal(validateData(thirtyMins), true);
+
+  // Undo reverts to open and amount = 1
+  const undone = uncompleteTask(thirtyMins, cTask, day);
+  assert.equal(balance(undone), 0);
+  assert.equal(undone.tasks.find((t) => t.id === cTask).status, "open");
+  assert.equal(undone.tasks.find((t) => t.id === cTask).amount, 1);
+  assert.equal(undone.tasks.find((t) => t.id === cTask).duration, undefined);
+  assert.equal(validateData(undone), true);
+});
 
 

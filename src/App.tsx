@@ -69,7 +69,7 @@ export default function App() {
   const [poolView, setPoolView] = useState(initialPoolView);
   const [month, setMonth] = useState(() => `${localDate().slice(0, 7)}-01`);
   const [selectedDate, setSelectedDate] = useState(localDate);
-  async function finish(task: Task) {
+  async function finish(task: Task, duration?: number) {
     if (!app.canChange()) return;
     const date = localDate();
     app.setToday(date);
@@ -109,12 +109,18 @@ export default function App() {
       }
     }
     const result = await update(
-      (previous) => completeTask(previous, task.id, date),
+      (previous) => completeTask(previous, task.id, date, duration),
       base,
     );
     if (!result) return;
     const earned = balance(result.snapshot.data) - balance(base.data);
-    setToast(`You did it! +${earned} 卡拉米 · 每一步都算数`);
+    if (task.kind === "cantonese" && duration !== undefined) {
+      const mins = Math.min(30, Math.floor(duration / 60));
+      const goalHint = mins >= 30 ? " · 已计入周目标！" : " · 未满30分未计入周目标";
+      setToast(`练习完成！+${earned} 卡拉米${goalHint}`);
+    } else {
+      setToast(`You did it! +${earned} 卡拉米 · 每一步都算数`);
+    }
   }
   async function toggleStep(task: Task, stepId: string) {
     if (!app.canChange()) return;
@@ -409,7 +415,15 @@ export default function App() {
           close={() => setChooser(false)}
           candidates={data.tasks
             .filter((task) => schedulable(task, today))
-            .sort((a, b) => a.priority - b.priority)}
+            .sort(
+              (a, b) =>
+                a.priority - b.priority ||
+                (a.kind === "cantonese" && b.kind === "english"
+                  ? -1
+                  : a.kind === "english" && b.kind === "cantonese"
+                    ? 1
+                    : 0),
+            )}
           selection={selection}
           setSelection={setSelection}
           today={today}

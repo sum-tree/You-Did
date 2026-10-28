@@ -25,6 +25,7 @@ export interface Task {
   status: "open" | "done" | "archived";
   createdAt: string;
   steps?: InterviewStep[];
+  duration?: number;
 }
 export interface Completion {
   taskId: string;
@@ -199,10 +200,15 @@ export function interviewRewardInfo(
     ? { now: tier.reward, next: next.reward, inDays: tier.lastDay - days + 1 }
     : { now: tier.reward };
 }
+export function cantoneseReward(task: Task): number {
+  if (task.duration === undefined) return TASK_REWARD.cantonese;
+  const mins = Math.min(30, Math.floor(task.duration / 60));
+  return Math.min(3, Math.floor(mins / 10));
+}
 export function taskReward(task: Task, date: string): number {
-  return task.kind === "interview"
-    ? interviewReward(task, date)
-    : TASK_REWARD[task.kind];
+  if (task.kind === "interview") return interviewReward(task, date);
+  if (task.kind === "cantonese") return cantoneseReward(task);
+  return TASK_REWARD[task.kind];
 }
 export function emptyData(): AppData {
   return {
@@ -389,7 +395,12 @@ export function settleRewards(
   }
   return { ...data, rewards };
 }
-export function completeTask(data: AppData, id: string, date: string): AppData {
+export function completeTask(
+  data: AppData,
+  id: string,
+  date: string,
+  duration?: number,
+): AppData {
   const task = data.tasks.find((item) => item.id === id);
   if (
     !task ||
@@ -397,36 +408,42 @@ export function completeTask(data: AppData, id: string, date: string): AppData {
     data.completions.some((item) => item.taskId === id)
   )
     return data;
+  if (task.kind === "cantonese" && duration !== undefined && duration < 600)
+    return data;
   const week = weekStart(date);
+  let taskAmount = task.amount;
+  if (task.kind === "cantonese" && duration !== undefined) {
+    const mins = Math.min(30, Math.floor(duration / 60));
+    taskAmount = mins >= 30 ? 1 : 0;
+  }
+  const updatedTask: Task = {
+    ...task,
+    status: "done",
+    amount: taskAmount,
+    ...(duration !== undefined ? { duration } : {}),
+    ...(task.steps
+      ? { steps: task.steps.map((s) => ({ ...s, done: true })) }
+      : {}),
+  };
   const completion: Completion = {
     taskId: id,
     title: task.title,
     category: task.category,
     kind: task.kind,
-    amount: task.amount,
+    amount: taskAmount,
     date,
     week,
   };
   return settleRewards(
     {
       ...data,
-      tasks: data.tasks.map((item) =>
-        item.id === id
-          ? {
-              ...item,
-              status: "done",
-              ...(item.steps
-                ? { steps: item.steps.map((s) => ({ ...s, done: true })) }
-                : {}),
-            }
-          : item,
-      ),
+      tasks: data.tasks.map((item) => (item.id === id ? updatedTask : item)),
       completions: [...data.completions, completion],
       rewards: [
         ...data.rewards,
         {
           id: `task:${id}`,
-          amount: taskReward(task, date),
+          amount: taskReward(updatedTask, date),
           label: task.title,
           date,
           week,
@@ -453,6 +470,10 @@ export function uncompleteTask(
   const week = record.week;
   const revertTask = (item: Task): Task => {
     if (item.id !== id) return item;
+    if (item.kind === "cantonese") {
+      const { duration, ...rest } = item;
+      return { ...rest, status: "open", amount: 1 };
+    }
     if (item.steps && item.steps.length > 0) {
       const steps = [...item.steps];
       for (let i = steps.length - 1; i >= 0; i--) {
@@ -724,9 +745,15 @@ export function moveTasks(data: AppData, ids: string[], date: string): AppData {
     date,
   );
 }
+function speechRank(a: Task, b: Task): number {
+  if (a.kind === "cantonese" && b.kind === "english") return -1;
+  if (a.kind === "english" && b.kind === "cantonese") return 1;
+  return 0;
+}
 function prioritySort(a: Task, b: Task) {
   return (
     a.priority - b.priority ||
+    speechRank(a, b) ||
     (a.dueDate || "9999").localeCompare(b.dueDate || "9999") ||
     a.createdAt.localeCompare(b.createdAt) ||
     a.id.localeCompare(b.id)
@@ -743,21 +770,21 @@ export const WEEKLY_TASKS = [
     priority: 1,
   },
   {
-    series: "english",
-    title: "英语面试练习3题",
-    category: "speech",
-    kind: "english",
-    amount: 3,
-    count: 3,
-    priority: 1,
-  },
-  {
     series: "cantonese",
     title: "粤语30分钟",
     category: "speech",
     kind: "cantonese",
     amount: 1,
     count: 2,
+    priority: 1,
+  },
+  {
+    series: "english",
+    title: "英语面试练习3题",
+    category: "speech",
+    kind: "english",
+    amount: 3,
+    count: 3,
     priority: 1,
   },
 ] as const;
@@ -976,10 +1003,10 @@ export function dailyTasks(data: AppData, date: string): Task[] {
     return [...new Set(manual)]
       .map((id) => open.find((task) => task.id === id))
       .filter((task): task is Task => Boolean(task))
-      .sort((a, b) => a.priority - b.priority);
+      .sort((a, b) => a.priority - b.priority || speechRank(a, b));
   }
   // Generated series: one task per series per day; resume is guaranteed, then
-  // ordinary tasks fill to two, then English (else Cantonese) if a slot is left.
+  // ordinary tasks fill to two, then Cantonese (else English) if a slot is left.
   const doneToday = new Set(
     data.completions
       .filter((item) => item.date === date)
@@ -1008,11 +1035,11 @@ export function dailyTasks(data: AppData, date: string): Task[] {
     if (!picked.includes(task)) picked.push(task);
   }
   const speaking =
-    doneToday.has("english") || doneToday.has("cantonese")
+    doneToday.has("cantonese") || doneToday.has("english")
       ? undefined
-      : (next("english") ?? next("cantonese"));
+      : (next("cantonese") ?? next("english"));
   if (speaking && picked.length < 3) picked.push(speaking);
-  return picked.sort((a, b) => a.priority - b.priority);
+  return picked.sort((a, b) => a.priority - b.priority || speechRank(a, b));
 }
 // Open core tasks first, then tasks actually completed that day; each ID appears once.
 export function dailyView(data: AppData, date: string): Task[] {
@@ -1069,6 +1096,7 @@ export function normalizeData(data: AppData): AppData {
             })),
           }
         : {}),
+      ...(typeof t.duration === "number" ? { duration: t.duration } : {}),
     })),
     completions: data.completions.map((c) => ({
       taskId: c.taskId,
@@ -1111,7 +1139,7 @@ function validateRecord(value: unknown, version: 1 | 2): boolean {
   const category = (v: unknown) =>
     v === "job" || v === "speech" || v === "course";
   const amount = (v: unknown) =>
-    typeof v === "number" && Number.isSafeInteger(v) && v >= 1 && v <= 10000;
+    typeof v === "number" && Number.isSafeInteger(v) && v >= 0 && v <= 10000;
   const contribution = (k: unknown, c: Category) =>
     typeof k === "string" &&
     Object.hasOwn(KIND, k) &&
@@ -1167,7 +1195,12 @@ function validateRecord(value: unknown, version: 1 | 2): boolean {
           t.amount === 1) &&
         ["open", "done", "archived"].includes(t.status) &&
         text(t.createdAt, 50) &&
-        (t.steps === undefined || (version === 2 && stepsList(t.steps))),
+        (t.steps === undefined || (version === 2 && stepsList(t.steps))) &&
+        (t.duration === undefined ||
+          (typeof t.duration === "number" &&
+            Number.isSafeInteger(t.duration) &&
+            t.duration >= 0 &&
+            t.duration <= 86400)),
     )
   )
     return false;
