@@ -2206,37 +2206,64 @@ main {
   font-family: var(--font-mono, ui-monospace, monospace);
 }
 
-.cantonese-tier-badge {
-  font-size: 11px;
-  font-weight: 600;
-  padding: 2px 8px;
-  border-radius: 12px;
-  border: 1px solid transparent;
+.cantonese-milestones-track {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  margin: 2px 0 4px 0;
 }
 
-.cantonese-tier-badge.tier-0 {
-  background: #f0f3eb;
-  color: #728169;
-  border-color: #e2e8da;
+.cantonese-milestones {
+  position: relative;
+  height: 18px;
+  width: 100%;
 }
 
-.cantonese-tier-badge.tier-1 {
-  background: #eef7e6;
-  color: #457829;
-  border-color: #d1e8c2;
+.cantonese-milestone {
+  position: absolute;
+  top: 0;
+  display: inline-flex;
+  align-items: center;
+  transition: all 0.25s ease;
+  opacity: 0.65;
 }
 
-.cantonese-tier-badge.tier-2 {
-  background: #e4f3d8;
-  color: #366d1f;
-  border-color: #bfe0a9;
+.cantonese-milestone.milestone-10 {
+  left: 33.333%;
+  transform: translateX(-50%);
 }
 
-.cantonese-tier-badge.tier-3 {
-  background: #d8eed0;
-  color: #285e13;
-  font-weight: 700;
-  border-color: #aed996;
+.cantonese-milestone.milestone-20 {
+  left: 66.666%;
+  transform: translateX(-50%);
+}
+
+.cantonese-milestone.milestone-30 {
+  left: 100%;
+  transform: translateX(-100%);
+}
+
+.cantonese-milestone .milestone-icons {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.cantonese-milestone.reached {
+  opacity: 1;
+}
+
+.cantonese-milestone.milestone-10.reached {
+  transform: translateX(-50%) scale(1.08);
+}
+
+.cantonese-milestone.milestone-20.reached {
+  transform: translateX(-50%) scale(1.08);
+}
+
+.cantonese-milestone.milestone-30.reached {
+  transform: translateX(-100%) scale(1.08);
 }
 
 .cantonese-timer-track {
@@ -2336,13 +2363,6 @@ main {
 .timer-btn-ghost:hover {
   color: #3b4e31;
   background: #edf2e7;
-}
-
-.cantonese-timer-tip {
-  font-size: 11px;
-  color: #73826a;
-  line-height: 1.4;
-  margin: 0;
 }
 
 .cantonese-completed-summary {

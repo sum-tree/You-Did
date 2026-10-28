@@ -135,19 +135,47 @@ function CantoneseTimer({
           <span className="timer-digits">{timeStr}</span>
           <span className="timer-target">/ 30:00</span>
         </div>
-        <div className={`cantonese-tier-badge tier-${currentTier}`}>
-          {currentTier === 0 ? "满10分得1卡拉米" : `当前可得 ${currentTier} 卡拉米`}
-          {currentTier === 3 && " · 计周目标"}
-        </div>
       </div>
 
-      <div className="cantonese-timer-track">
-        <div
-          className="cantonese-timer-progress"
-          style={{ width: `${progressPercent}%` }}
-        />
-        <div className="cantonese-marker marker-10" title="10分钟 (1卡拉米)" />
-        <div className="cantonese-marker marker-20" title="20分钟 (2卡拉米)" />
+      <div className="cantonese-milestones-track">
+        <div className="cantonese-milestones">
+          <div
+            className={`cantonese-milestone milestone-10 ${elapsed >= 600 ? "reached" : ""}`}
+            title="10分钟 (1卡拉米)"
+          >
+            <span className="milestone-icons">
+              <KalamiIcon size={16} />
+            </span>
+          </div>
+          <div
+            className={`cantonese-milestone milestone-20 ${elapsed >= 1200 ? "reached" : ""}`}
+            title="20分钟 (2卡拉米)"
+          >
+            <span className="milestone-icons">
+              <KalamiIcon size={16} />
+              <KalamiIcon size={16} />
+            </span>
+          </div>
+          <div
+            className={`cantonese-milestone milestone-30 ${elapsed >= 1800 ? "reached" : ""}`}
+            title="30分钟 (3卡拉米)"
+          >
+            <span className="milestone-icons">
+              <KalamiIcon size={16} />
+              <KalamiIcon size={16} />
+              <KalamiIcon size={16} />
+            </span>
+          </div>
+        </div>
+
+        <div className="cantonese-timer-track">
+          <div
+            className="cantonese-timer-progress"
+            style={{ width: `${progressPercent}%` }}
+          />
+          <div className="cantonese-marker marker-10" title="10分钟 (1卡拉米)" />
+          <div className="cantonese-marker marker-20" title="20分钟 (2卡拉米)" />
+        </div>
       </div>
 
       <div className="cantonese-timer-controls">
@@ -213,14 +241,6 @@ function CantoneseTimer({
           </>
         )}
       </div>
-
-      <p className="cantonese-timer-tip">
-        {elapsed < 600
-          ? "每满 10 分钟得 1 卡拉米；练满 30 分钟得 3 卡拉米并计入周目标（超30分钟自动关闭并按30分钟结算）"
-          : elapsed < 1800
-            ? `已练习 ${mins} 分钟，当前可结算 +${currentTier} 卡拉米；继续练满 30 分钟可得 3 卡拉米并达成周目标`
-            : "已达到 30 分钟上限，已自动为您关闭计时并结算 3 卡拉米！"}
-      </p>
     </div>
   );
 }

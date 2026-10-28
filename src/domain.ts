@@ -775,7 +775,7 @@ export const WEEKLY_TASKS = [
     category: "speech",
     kind: "cantonese",
     amount: 1,
-    count: 2,
+    count: 7,
     priority: 1,
   },
   {
@@ -840,7 +840,15 @@ export function ensureWeek(data: AppData, date: string): AppData {
   }
 
   const courseWeekChanged = nextCourseWeek !== data.courseWeek;
-  if (data.autoWeek && data.autoWeek >= week && !courseWeekChanged) return data;
+  const hasMissingWeeklyTasks = WEEKLY_TASKS.some((item) => {
+    for (let n = 1; n <= item.count; n++) {
+      if (!data.tasks.some((t) => t.id === `auto:${week}:${item.series}:${n}`)) {
+        return true;
+      }
+    }
+    return false;
+  });
+  if (data.autoWeek && data.autoWeek >= week && !courseWeekChanged && !hasMissingWeeklyTasks) return data;
 
   const existing = new Set(data.tasks.map((task) => task.id));
   const tasks: Task[] = data.tasks
@@ -1006,7 +1014,8 @@ export function dailyTasks(data: AppData, date: string): Task[] {
       .sort((a, b) => a.priority - b.priority || speechRank(a, b));
   }
   // Generated series: one task per series per day; resume is guaranteed, then
-  // ordinary tasks fill to two, then Cantonese (else English) if a slot is left.
+  // urgent ordinary tasks, then Cantonese is scheduled by default every day,
+  // then open ordinary tasks, then English if a slot is left.
   const doneToday = new Set(
     data.completions
       .filter((item) => item.date === date)
@@ -1034,11 +1043,16 @@ export function dailyTasks(data: AppData, date: string): Task[] {
     if (picked.length >= 2) break;
     if (!picked.includes(task)) picked.push(task);
   }
-  const speaking =
-    doneToday.has("cantonese") || doneToday.has("english")
+  const cantonese = next("cantonese");
+  if (cantonese && picked.length < 3) picked.push(cantonese);
+  const cantoneseDoneCount = data.completions.filter(
+    (item) => item.week === currentWeek && item.kind === "cantonese",
+  ).length;
+  const english =
+    doneToday.has("english") || cantoneseDoneCount < 2
       ? undefined
-      : (next("cantonese") ?? next("english"));
-  if (speaking && picked.length < 3) picked.push(speaking);
+      : next("english");
+  if (english && picked.length < 3) picked.push(english);
   return picked.sort((a, b) => a.priority - b.priority || speechRank(a, b));
 }
 // Open core tasks first, then tasks actually completed that day; each ID appears once.

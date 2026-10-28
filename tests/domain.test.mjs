@@ -25,6 +25,7 @@ import {
   normalizeData,
   poolTasks,
   saveTask,
+  schedulable,
   setInterviewSteps,
   shouldSuggestInterviewSplit,
   toggleInterviewStep,
@@ -474,7 +475,7 @@ test("task titles determine the goal contribution and quantity", () => {
 });
 const nextDay = "2026-10-13";
 const auto = (series, n, week = day) => `auto:${week}:${series}:${n}`;
-test("each week generates the eight fixed tasks once", () => {
+test("each week generates the thirteen fixed tasks once", () => {
   const data = ensureWeek(emptyData(), nextDay);
   assert.equal(data.autoWeek, day);
   assert.deepEqual(
@@ -485,6 +486,11 @@ test("each week generates the eight fixed tasks once", () => {
       [auto("resume", 3), "香港秋招简历x5", "resume", 5, day],
       [auto("cantonese", 1), "粤语30分钟", "cantonese", 1, day],
       [auto("cantonese", 2), "粤语30分钟", "cantonese", 1, day],
+      [auto("cantonese", 3), "粤语30分钟", "cantonese", 1, day],
+      [auto("cantonese", 4), "粤语30分钟", "cantonese", 1, day],
+      [auto("cantonese", 5), "粤语30分钟", "cantonese", 1, day],
+      [auto("cantonese", 6), "粤语30分钟", "cantonese", 1, day],
+      [auto("cantonese", 7), "粤语30分钟", "cantonese", 1, day],
       [auto("english", 1), "英语面试练习3题", "english", 3, day],
       [auto("english", 2), "英语面试练习3题", "english", 3, day],
       [auto("english", 3), "英语面试练习3题", "english", 3, day],
@@ -506,7 +512,7 @@ test("a new week clears last week's open generated tasks but keeps records", () 
   assert.equal(next.tasks.find((t) => t.id === auto("resume", 2)), undefined);
   assert.equal(next.tasks.find((t) => t.id === auto("cantonese", 2)), undefined);
   assert.equal(status("mine"), "open");
-  assert.equal(next.tasks.filter((t) => t.plannedWeek === "2026-10-19").length, 8);
+  assert.equal(next.tasks.filter((t) => t.plannedWeek === "2026-10-19").length, 13);
   assert.equal(balance(next), balance(data));
   assert.equal(validateData(next), true);
 });
@@ -549,7 +555,7 @@ test("each series appears once a day and English waits for Cantonese", () => {
   data = finishAll(data, [auto("cantonese", 2)], nextDay);
   assert.deepEqual(
     dailyTasks(data, "2026-10-14").map((t) => t.id),
-    [auto("resume", 2), auto("english", 1)],
+    [auto("resume", 2), auto("cantonese", 3), auto("english", 1)],
   );
 });
 test("resume stays guaranteed when ordinary tasks are overdue", () => {
@@ -748,7 +754,7 @@ test("generated tasks report their series and todo display name", () => {
   const names = data.tasks.map((t) => [generatedSeries(t), SERIES_NAME[generatedSeries(t)]]);
   assert.deepEqual(names[0], ["resume", "香港秋招简历投递"]);
   assert.deepEqual(names[3], ["cantonese", "粤语口语练习"]);
-  assert.deepEqual(names[5], ["english", "英语口语练习"]);
+  assert.deepEqual(names[10], ["english", "英语口语练习"]);
   assert.equal(generatedSeries(task("mine", "resume", 5)), undefined);
 });
 
@@ -1407,5 +1413,28 @@ test("cantonese timer awards tiered kalami and only 30-min counts toward weekly 
   assert.equal(undone.tasks.find((t) => t.id === cTask).duration, undefined);
   assert.equal(validateData(undone), true);
 });
+
+test("cantonese practice is scheduled by default every day across the week", () => {
+  let data = ensureWeek(emptyData(), day);
+  for (let i = 0; i < 7; i++) {
+    const curDay = addDays(day, i);
+    const tasks = dailyTasks(data, curDay);
+    const cantonese = tasks.find((t) => t.kind === "cantonese");
+    assert.ok(cantonese, `Expected cantonese task on day ${curDay}`);
+    assert.equal(cantonese.id, auto("cantonese", i + 1));
+    // Complete it on curDay and check next day still has cantonese
+    data = completeTask(data, cantonese.id, curDay, 1800);
+  }
+});
+
+test("cantonese tasks are filtered out of manual arrangement candidates", () => {
+  const data = ensureWeek(emptyData(), day);
+  const candidates = data.tasks.filter(
+    (task) => schedulable(task, day) && task.kind !== "cantonese",
+  );
+  assert.ok(candidates.length > 0);
+  assert.equal(candidates.some((t) => t.kind === "cantonese"), false);
+});
+
 
 

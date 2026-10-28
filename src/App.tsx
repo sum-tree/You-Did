@@ -272,7 +272,11 @@ export default function App() {
             onFinish={finish}
             onMenu={(task) => setTaskMenu(task)}
             onArrange={() => {
-              setSelection(dailyTasks(data, today).map((task) => task.id));
+              setSelection(
+                dailyTasks(data, today)
+                  .filter((task) => task.kind !== "cantonese")
+                  .map((task) => task.id),
+              );
               setChooser(true);
             }}
             onTodo={() => changePage("pool")}
@@ -414,7 +418,9 @@ export default function App() {
           update={update}
           close={() => setChooser(false)}
           candidates={data.tasks
-            .filter((task) => schedulable(task, today))
+            .filter(
+              (task) => schedulable(task, today) && task.kind !== "cantonese",
+            )
             .sort(
               (a, b) =>
                 a.priority - b.priority ||
