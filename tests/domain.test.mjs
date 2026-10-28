@@ -1377,29 +1377,22 @@ test("cantonese timer awards tiered kalami and only 30-min counts toward weekly 
   const cTask = auto("cantonese", 1);
   let data = ensureWeek(emptyData(), day);
 
-  // Less than 10 mins: cannot complete (no reward)
-  const shortRun = completeTask(data, cTask, day, 500);
+  // Less than 15 mins: cannot complete (no reward)
+  const shortRun = completeTask(data, cTask, day, 800);
   assert.equal(shortRun.tasks.find((t) => t.id === cTask).status, "open");
 
-  // 10-19 mins: 1 kalami, 0 amount towards weekly goal
-  const tenMins = completeTask(data, cTask, day, 600);
-  assert.equal(balance(tenMins), 1);
-  assert.equal(tenMins.tasks.find((t) => t.id === cTask).status, "done");
-  assert.equal(tenMins.tasks.find((t) => t.id === cTask).duration, 600);
-  assert.equal(tenMins.tasks.find((t) => t.id === cTask).amount, 0);
-  assert.equal(tenMins.completions.find((c) => c.taskId === cTask).amount, 0);
-  assert.equal(validateData(tenMins), true);
+  // 15-29 mins: 1 kalami, 0 amount towards weekly goal
+  const fifteenMins = completeTask(data, cTask, day, 900);
+  assert.equal(balance(fifteenMins), 1);
+  assert.equal(fifteenMins.tasks.find((t) => t.id === cTask).status, "done");
+  assert.equal(fifteenMins.tasks.find((t) => t.id === cTask).duration, 900);
+  assert.equal(fifteenMins.tasks.find((t) => t.id === cTask).amount, 0);
+  assert.equal(fifteenMins.completions.find((c) => c.taskId === cTask).amount, 0);
+  assert.equal(validateData(fifteenMins), true);
 
-  // 20-29 mins: 2 kalami, 0 amount towards weekly goal
-  const twentyMins = completeTask(data, cTask, day, 1200);
-  assert.equal(balance(twentyMins), 2);
-  assert.equal(twentyMins.tasks.find((t) => t.id === cTask).duration, 1200);
-  assert.equal(twentyMins.tasks.find((t) => t.id === cTask).amount, 0);
-  assert.equal(validateData(twentyMins), true);
-
-  // 30 mins: 3 kalami, 1 amount towards weekly goal
+  // 30 mins: 2 kalami, 1 amount towards weekly goal
   const thirtyMins = completeTask(data, cTask, day, 1800);
-  assert.equal(balance(thirtyMins), 3);
+  assert.equal(balance(thirtyMins), 2);
   assert.equal(thirtyMins.tasks.find((t) => t.id === cTask).duration, 1800);
   assert.equal(thirtyMins.tasks.find((t) => t.id === cTask).amount, 1);
   assert.equal(thirtyMins.completions.find((c) => c.taskId === cTask).amount, 1);

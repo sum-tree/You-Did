@@ -203,7 +203,7 @@ export function interviewRewardInfo(
 export function cantoneseReward(task: Task): number {
   if (task.duration === undefined) return TASK_REWARD.cantonese;
   const mins = Math.min(30, Math.floor(task.duration / 60));
-  return Math.min(3, Math.floor(mins / 10));
+  return mins >= 30 ? 2 : mins >= 15 ? 1 : 0;
 }
 export function taskReward(task: Task, date: string): number {
   if (task.kind === "interview") return interviewReward(task, date);
@@ -408,7 +408,7 @@ export function completeTask(
     data.completions.some((item) => item.taskId === id)
   )
     return data;
-  if (task.kind === "cantonese" && duration !== undefined && duration < 600)
+  if (task.kind === "cantonese" && duration !== undefined && duration < 900)
     return data;
   const week = weekStart(date);
   let taskAmount = task.amount;

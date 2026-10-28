@@ -2229,13 +2229,8 @@ main {
   opacity: 0.65;
 }
 
-.cantonese-milestone.milestone-10 {
-  left: 33.333%;
-  transform: translateX(-50%);
-}
-
-.cantonese-milestone.milestone-20 {
-  left: 66.666%;
+.cantonese-milestone.milestone-15 {
+  left: 50%;
   transform: translateX(-50%);
 }
 
@@ -2254,11 +2249,7 @@ main {
   opacity: 1;
 }
 
-.cantonese-milestone.milestone-10.reached {
-  transform: translateX(-50%) scale(1.08);
-}
-
-.cantonese-milestone.milestone-20.reached {
+.cantonese-milestone.milestone-15.reached {
   transform: translateX(-50%) scale(1.08);
 }
 
@@ -2291,12 +2282,8 @@ main {
   border-radius: 1px;
 }
 
-.cantonese-marker.marker-10 {
-  left: 33.333%;
-}
-
-.cantonese-marker.marker-20 {
-  left: 66.666%;
+.cantonese-marker.marker-15 {
+  left: 50%;
 }
 
 .cantonese-timer-controls {

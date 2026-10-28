@@ -44,7 +44,7 @@ export function taskRewardHint(task: Task, today: string): string | null {
       : `完成可得${info.now}卡拉米 · ${info.inDays}天后变为${info.next}`;
   }
   if (task.kind === "cantonese") {
-    return "计时练习 · 最高可得3卡拉米";
+    return "计时练习 · 最高可得2卡拉米";
   }
   const reward = taskReward(task, today);
   return `完成可得${reward}卡拉米`;

@@ -113,7 +113,7 @@ function CantoneseTimer({
   };
 
   const handleSettle = () => {
-    if (elapsed < 600) return;
+    if (elapsed < 900) return;
     saveCantoneseTimer(task.id, null);
     onFinish(task, elapsed);
   };
@@ -122,7 +122,7 @@ function CantoneseTimer({
   const secs = elapsed % 60;
   const timeStr = `${String(mins).padStart(2, "0")}:${String(secs).padStart(2, "0")}`;
   const progressPercent = Math.min(100, Math.round((elapsed / 1800) * 100));
-  const currentTier = Math.min(3, Math.floor(mins / 10));
+  const currentTier = mins >= 30 ? 2 : mins >= 15 ? 1 : 0;
 
   return (
     <div className="cantonese-timer-block">
@@ -140,28 +140,18 @@ function CantoneseTimer({
       <div className="cantonese-milestones-track">
         <div className="cantonese-milestones">
           <div
-            className={`cantonese-milestone milestone-10 ${elapsed >= 600 ? "reached" : ""}`}
-            title="10分钟 (1卡拉米)"
+            className={`cantonese-milestone milestone-15 ${elapsed >= 900 ? "reached" : ""}`}
+            title="15分钟 (1卡拉米)"
           >
             <span className="milestone-icons">
-              <KalamiIcon size={16} />
-            </span>
-          </div>
-          <div
-            className={`cantonese-milestone milestone-20 ${elapsed >= 1200 ? "reached" : ""}`}
-            title="20分钟 (2卡拉米)"
-          >
-            <span className="milestone-icons">
-              <KalamiIcon size={16} />
               <KalamiIcon size={16} />
             </span>
           </div>
           <div
             className={`cantonese-milestone milestone-30 ${elapsed >= 1800 ? "reached" : ""}`}
-            title="30分钟 (3卡拉米)"
+            title="30分钟 (2卡拉米)"
           >
             <span className="milestone-icons">
-              <KalamiIcon size={16} />
               <KalamiIcon size={16} />
               <KalamiIcon size={16} />
             </span>
@@ -173,8 +163,7 @@ function CantoneseTimer({
             className="cantonese-timer-progress"
             style={{ width: `${progressPercent}%` }}
           />
-          <div className="cantonese-marker marker-10" title="10分钟 (1卡拉米)" />
-          <div className="cantonese-marker marker-20" title="20分钟 (2卡拉米)" />
+          <div className="cantonese-marker marker-15" title="15分钟 (1卡拉米)" />
         </div>
       </div>
 
@@ -201,12 +190,12 @@ function CantoneseTimer({
             <button
               type="button"
               className="timer-btn timer-btn-success"
-              disabled={elapsed < 600}
+              disabled={elapsed < 900}
               onClick={handleSettle}
-              title={elapsed < 600 ? "需满 10 分钟方可结算" : "结算当前卡拉米奖励"}
+              title={elapsed < 900 ? "需满 15 分钟方可结算" : "结算当前卡拉米奖励"}
             >
               <Check size={14} />
-              {elapsed < 600 ? "需满10分结算" : `结束并结算 (+${currentTier}卡拉米)`}
+              {elapsed < 900 ? "需满15分结算" : `结束并结算 (+${currentTier}卡拉米)`}
             </button>
           </>
         )}
@@ -223,12 +212,12 @@ function CantoneseTimer({
             <button
               type="button"
               className="timer-btn timer-btn-success"
-              disabled={elapsed < 600}
+              disabled={elapsed < 900}
               onClick={handleSettle}
-              title={elapsed < 600 ? "需满 10 分钟方可结算" : "结算当前卡拉米奖励"}
+              title={elapsed < 900 ? "需满 15 分钟方可结算" : "结算当前卡拉米奖励"}
             >
               <Check size={14} />
-              {elapsed < 600 ? "需满10分结算" : `结束并结算 (+${currentTier}卡拉米)`}
+              {elapsed < 900 ? "需满15分结算" : `结束并结算 (+${currentTier}卡拉米)`}
             </button>
             <button
               type="button"
