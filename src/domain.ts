@@ -291,6 +291,31 @@ export function visibleYearlyMonthsStats(data: AppData, year: number): MonthStat
   return allMonths;
 }
 
+// Speaking progress: 4 Cantonese units + 2 English units = 100%. Each unit is
+// worth the same; a Cantonese session settled at 15-29 minutes is half a unit.
+// Units beyond each cap are not counted for now.
+export const SPEECH_TARGET = { cantonese: 4, english: 2 } as const;
+export function speechUnits(
+  completions: Completion[],
+  tasks: Task[],
+): { cantonese: number; english: number } {
+  const byId = new Map(tasks.map((task) => [task.id, task]));
+  let cantonese = 0;
+  let english = 0;
+  for (const item of completions) {
+    if (item.kind === "english") english += 1;
+    if (item.kind !== "cantonese") continue;
+    if (item.amount > 0) cantonese += item.amount;
+    else if ((byId.get(item.taskId)?.duration ?? 0) >= 900) cantonese += 0.5;
+  }
+  return { cantonese, english };
+}
+export function speechGoalMet(units: { cantonese: number; english: number }) {
+  return (
+    units.cantonese >= SPEECH_TARGET.cantonese &&
+    units.english >= SPEECH_TARGET.english
+  );
+}
 function ratio(value: number, target: number): number {
   return target === 0 ? 1 : Math.min(1, value / target);
 }
@@ -327,7 +352,12 @@ export function weekStats(data: AppData, week: string) {
   const english = sum("english");
   const listening = sum("listening");
   const jobComplete = resumes >= 15 && interviewDone === interviewIds.size;
-  const speechComplete = cantonese >= 2 && english >= 9;
+  const units = speechUnits(records, data.tasks);
+  const speechComplete = speechGoalMet(units);
+  const speechCounted =
+    Math.min(units.cantonese, SPEECH_TARGET.cantonese) +
+    Math.min(units.english, SPEECH_TARGET.english);
+  const speechTotal = SPEECH_TARGET.cantonese + SPEECH_TARGET.english;
   const percent = (a: number, b: number, complete: boolean) =>
     complete ? 100 : Math.min(99, Math.floor((a + b) * 50));
   return {
@@ -348,11 +378,11 @@ export function weekStats(data: AppData, week: string) {
             ratio(interviewDone, interviewIds.size),
             jobComplete,
           ),
-    speechPercent: percent(
-      ratio(cantonese, 2),
-      ratio(english, 9),
-      speechComplete,
-    ),
+    speechCantoneseUnits: units.cantonese,
+    speechEnglishUnits: units.english,
+    speechPercent: speechComplete
+      ? 100
+      : Math.min(99, Math.floor((speechCounted / speechTotal) * 100)),
     jobTiers: Math.floor(Math.max(0, resumes - 15) / 3),
     speechTiers: Math.floor(listening / 10),
     completed: records.length,
@@ -499,7 +529,7 @@ export function uncompleteTask(
   const category = job ? "job" : "speech";
   const goalLost = job
     ? stats.resumes < 15 || (gatesJob(record.kind) && !stats.jobComplete)
-    : record.kind !== "listening" && (stats.cantonese < 2 || stats.english < 9);
+    : record.kind !== "listening" && !stats.speechComplete;
   const maxTier = job ? stats.jobTiers : stats.speechTiers;
   const revoked = (reward: Reward) => {
     if (reward.date !== date || reward.week !== week) return false;
@@ -1013,9 +1043,9 @@ export function dailyTasks(data: AppData, date: string): Task[] {
       .filter((task): task is Task => Boolean(task))
       .sort((a, b) => a.priority - b.priority || speechRank(a, b));
   }
-  // Generated series: one task per series per day; resume is guaranteed, then
-  // urgent ordinary tasks, then Cantonese is scheduled by default every day,
-  // then open ordinary tasks, then English if a slot is left.
+  // Generated series: one task per series per day. Resume and Cantonese are
+  // guaranteed (Cantonese keeps a reserved slot every day), then urgent
+  // ordinary tasks, then open ordinary tasks, then English if a slot is left.
   const doneToday = new Set(
     data.completions
       .filter((item) => item.date === date)
@@ -1033,8 +1063,10 @@ export function dailyTasks(data: AppData, date: string): Task[] {
   const picked: Task[] = [];
   const resume = next("resume");
   if (resume) picked.push(resume);
+  const cantonese = next("cantonese");
+  const urgentLimit = cantonese ? 2 : 3;
   for (const task of urgent.filter((task) => !isGenerated(task))) {
-    if (picked.length >= 3) break;
+    if (picked.length >= urgentLimit) break;
     picked.push(task);
   }
   for (const task of open
@@ -1043,8 +1075,7 @@ export function dailyTasks(data: AppData, date: string): Task[] {
     if (picked.length >= 2) break;
     if (!picked.includes(task)) picked.push(task);
   }
-  const cantonese = next("cantonese");
-  if (cantonese && picked.length < 3) picked.push(cantonese);
+  if (cantonese) picked.push(cantonese);
   const cantoneseDoneCount = data.completions.filter(
     (item) => item.week === currentWeek && item.kind === "cantonese",
   ).length;
@@ -1067,6 +1098,37 @@ export function dailyView(data: AppData, date: string): Task[] {
     view.push(task);
   }
   return view;
+}
+// Candidates for the manual arrange panel. Each weekly generated series
+// (resume, Cantonese, English) appears at most once: the open task already in `selection` if any,
+// otherwise the earliest open one of this week. A series with nothing left open
+// this week does not appear at all.
+export function chooserCandidates(
+  data: AppData,
+  date: string,
+  selection: string[] = [],
+): Task[] {
+  const currentWeek = weekStart(date);
+  const open = data.tasks.filter((task) => schedulable(task, date));
+  const picked = new Map<Series, Task>();
+  for (const task of open) {
+    const series = seriesOf(task.id);
+    if (!series || task.plannedWeek !== currentWeek) continue;
+    const current = picked.get(series);
+    const taskSelected = selection.includes(task.id);
+    const currentSelected = current ? selection.includes(current.id) : false;
+    if (
+      !current ||
+      (taskSelected && !currentSelected) ||
+      (taskSelected === currentSelected && task.id.localeCompare(current.id) < 0)
+    ) {
+      picked.set(series, task);
+    }
+  }
+  const representatives = new Set(picked.values());
+  return open
+    .filter((task) => !isGenerated(task) || representatives.has(task))
+    .sort((a, b) => a.priority - b.priority || speechRank(a, b));
 }
 export function chooseDaily(
   data: AppData,
@@ -1346,10 +1408,18 @@ function validateRecord(value: unknown, version: 1 | 2): boolean {
     const category = match[2] as "job" | "speech";
     // Added interviews can lower present progress after a legitimate reward was earned.
     // Only immutable quantities can be checked; do not require the current goal to be complete.
+    // Speaking goals granted before the 4+2 rule used 2 sessions + 9 questions;
+    // either rule is accepted so earlier weeks' rewards stay valid.
     if (
       category === "job"
         ? week.resumes < 15
-        : week.cantonese < 2 || week.english < 9
+        : (week.cantonese < 2 || week.english < 9) &&
+          !speechGoalMet(
+            speechUnits(
+              d.completions.filter((item) => item.week === reward.week),
+              d.tasks,
+            ),
+          )
     )
       return false;
     if (goal) {

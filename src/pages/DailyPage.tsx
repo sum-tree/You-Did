@@ -341,7 +341,7 @@ export function DailyPage({
                       {task.duration !== undefined ? (
                         <>
                           ⏱️ 练习时长 <strong>{Math.floor(task.duration / 60)}</strong> 分钟 · 获得 <strong>{taskReward(task, today)}</strong> 卡拉米
-                          {task.duration >= 1800 ? "（已达成周目标）" : "（未满30分未计入周目标）"}
+                          {task.duration >= 1800 ? "（计入口语进度1份）" : "（计入口语进度半份）"}
                         </>
                       ) : (
                         <>已完成 · 获得 <strong>{taskReward(task, today)}</strong> 卡拉米</>

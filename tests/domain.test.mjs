@@ -6,6 +6,7 @@ import {
   balance,
   buildInterviewSteps,
   chooseDaily,
+  chooserCandidates,
   cleanupDuplicateTasks,
   completeTask,
   computeCourseWeek,
@@ -129,31 +130,65 @@ test("new interview recalculates progress without retracting or reissuing reward
     1,
   );
 });
-test("oral goal requires two 30-minute sessions and nine questions", () => {
+test("oral goal is 4 Cantonese units plus 2 English tasks, each unit equal", () => {
   let data = dataWith(
-    task("cantonese", "cantonese", 2),
-    task("english", "english", 9),
+    task("c1", "cantonese", 2),
+    task("c2", "cantonese", 2),
+    task("e1", "english", 3),
+    task("e2", "english", 3),
   );
-  data = completeTask(data, "cantonese", day);
-  assert.equal(weekStats(data, day).speechPercent, 50);
-  assert.equal(balance(data), 2);
-  data = completeTask(data, "english", day);
+  data = completeTask(data, "c1", day);
+  assert.equal(weekStats(data, day).speechPercent, 33);
+  data = finishAll(data, ["c2", "e1"]);
+  assert.equal(weekStats(data, day).speechPercent, 83);
+  assert.equal(weekStats(data, day).speechComplete, false);
+  data = completeTask(data, "e2", day);
   assert.equal(weekStats(data, day).speechPercent, 100);
-  assert.equal(balance(data), 13);
+  assert.equal(balance(data), 19); // tasks 2+2+4+4, goal 7
+  assert.equal(validateData(data), true);
+});
+test("a 15-minute Cantonese session is half a unit and extra units are capped", () => {
+  let data = ensureWeek(emptyData(), day);
+  data = completeTask(data, auto("cantonese", 1), day, 900);
+  assert.equal(weekStats(data, day).speechCantoneseUnits, 0.5);
+  assert.equal(weekStats(data, day).speechPercent, 8); // 0.5 / 6
+  for (let n = 2; n <= 7; n++)
+    data = completeTask(data, auto("cantonese", n), day, 1800);
+  // 6.5 Cantonese units, but only 4 count until English is done.
+  assert.equal(weekStats(data, day).speechPercent, 66);
+  assert.equal(validateData(data), true);
+});
+test("speaking goals granted under the old 2+9 rule remain valid", () => {
+  const done = finishAll(
+    dataWith(task("c", "cantonese", 2), task("e", "english", 9)),
+    ["c", "e"],
+  );
+  assert.equal(done.rewards.some((r) => r.id === `goal:${day}:speech`), false);
+  const legacyGoal = {
+    id: `goal:${day}:speech`,
+    amount: 7,
+    label: "大胆说口语 · 本周基础目标",
+    date: day,
+    week: day,
+  };
+  assert.equal(validateData({ ...done, rewards: [...done.rewards, legacyGoal] }), true);
+  const short = completeTask(dataWith(task("c", "cantonese", 1)), "c", day);
+  assert.equal(validateData({ ...short, rewards: [...short.rewards, legacyGoal] }), false);
 });
 test("listening is accumulated in whole ten-minute tiers and retroactively paid", () => {
   let data = dataWith(
     task("listen", "listening", 25),
-    task("c", "cantonese", 2),
-    task("e", "english", 9),
+    task("c", "cantonese", 4),
+    task("e1", "english", 3),
+    task("e2", "english", 3),
   );
   data = completeTask(data, "listen", day);
   assert.equal(balance(data), 2);
-  data = finishAll(data, ["c", "e"]);
-  assert.equal(balance(data), 19);
+  data = finishAll(data, ["c", "e1", "e2"]);
+  assert.equal(balance(data), 23); // tasks 2+4+4, goal 7, two listening tiers 4
   data = saveTask(data, task("listen2", "listening", 5), day);
   data = completeTask(data, "listen2", day);
-  assert.equal(balance(data), 23); // new task +2, third listening tier +2
+  assert.equal(balance(data), 27); // new task +2, third listening tier +2
 });
 test("a near-complete goal never rounds up to 100 percent", () => {
   const data = completeTask(dataWith(task("cv", "resume", 14)), "cv", day);
@@ -558,7 +593,7 @@ test("each series appears once a day and English waits for Cantonese", () => {
     [auto("resume", 2), auto("cantonese", 3), auto("english", 1)],
   );
 });
-test("resume stays guaranteed when ordinary tasks are overdue", () => {
+test("resume and Cantonese stay guaranteed when ordinary tasks are overdue", () => {
   const data = ensureWeek(
     dataWith(
       ...[1, 2, 3].map((i) => task(`u${i}`, "none", 1, { dueDate: addDays(day, -i) })),
@@ -567,7 +602,7 @@ test("resume stays guaranteed when ordinary tasks are overdue", () => {
   );
   assert.deepEqual(
     dailyTasks(data, day).map((t) => t.id),
-    [auto("resume", 1), "u3", "u2"],
+    [auto("resume", 1), "u3", auto("cantonese", 1)],
   );
 });
 test("manual planning ignores the weekly series rules", () => {
@@ -625,19 +660,20 @@ test("undoing an unrelated task never touches goal rewards", () => {
 });
 test("undoing speaking and listening revokes only the unsupported part", () => {
   let data = dataWith(
-    task("c", "cantonese", 2),
-    task("e", "english", 9),
+    task("c", "cantonese", 4),
+    task("e1", "english", 3),
+    task("e2", "english", 3),
     task("l1", "listening", 10),
     task("l2", "listening", 10),
   );
-  data = finishAll(data, ["c", "e", "l1"]);
+  data = finishAll(data, ["c", "e1", "e2", "l1"]);
   data = completeTask(data, "l2", nextDay);
-  assert.equal(balance(data), 21); // tasks 2+4+2+2, goal 7, two listening tiers 4
+  assert.equal(balance(data), 25); // tasks 2+4+4+2+2, goal 7, two listening tiers 4
   const lessListening = uncompleteTask(data, "l2", nextDay);
-  assert.equal(balance(lessListening), 17);
+  assert.equal(balance(lessListening), 21);
   assert.equal(validateData(lessListening), true);
-  const noGoal = uncompleteTask(lessListening, "e", day);
-  assert.equal(balance(noGoal), 4);
+  const noGoal = uncompleteTask(lessListening, "e2", day);
+  assert.equal(balance(noGoal), 8);
   assert.equal(validateData(noGoal), true);
 });
 test("an undone weekly task returns to today's plan", () => {
@@ -1373,7 +1409,7 @@ test("ensureWeek automatically updates lagging courseWeek to current week and ad
   assert.equal(customNextWeek.courseWeek, 8);
 });
 
-test("cantonese timer awards tiered kalami and only 30-min counts toward weekly goal", () => {
+test("cantonese timer awards tiered kalami and records a whole session only at 30 minutes", () => {
   const cTask = auto("cantonese", 1);
   let data = ensureWeek(emptyData(), day);
 
@@ -1420,14 +1456,29 @@ test("cantonese practice is scheduled by default every day across the week", () 
   }
 });
 
-test("cantonese tasks are filtered out of manual arrangement candidates", () => {
-  const data = ensureWeek(emptyData(), day);
-  const candidates = data.tasks.filter(
-    (task) => schedulable(task, day) && task.kind !== "cantonese",
+
+
+
+
+test("arrange panel shows each weekly series at most once, Cantonese included", () => {
+  let data = ensureWeek(dataWith(task("mine")), day);
+  const ids = (list) => list.map((t) => t.id).sort();
+  assert.deepEqual(
+    ids(chooserCandidates(data, day)),
+    [auto("cantonese", 1), auto("english", 1), auto("resume", 1), "mine"].sort(),
   );
-  assert.ok(candidates.length > 0);
-  assert.equal(candidates.some((t) => t.kind === "cantonese"), false);
+  // A task already selected stays as the series representative.
+  assert.deepEqual(
+    ids(chooserCandidates(data, day, [auto("resume", 2), auto("cantonese", 3)])),
+    [auto("cantonese", 3), auto("english", 1), auto("resume", 2), "mine"].sort(),
+  );
+  // After one is completed, the next open one of the series takes its place.
+  data = completeTask(data, auto("resume", 1), day);
+  assert.ok(ids(chooserCandidates(data, day)).includes(auto("resume", 2)));
+  // A series fully done this week disappears from the panel.
+  data = finishAll(data, [auto("resume", 2), auto("resume", 3)]);
+  assert.equal(
+    chooserCandidates(data, day).some((t) => generatedSeries(t) === "resume"),
+    false,
+  );
 });
-
-
-

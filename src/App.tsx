@@ -10,13 +10,13 @@ import {
 import {
   balance,
   chooseDaily,
+  chooserCandidates,
   completeTask,
   dailyTasks,
   getStepEncouragement,
   localDate,
   monthBalance,
   saveTask,
-  schedulable,
   toggleInterviewStep,
   uncompleteTask,
 } from "./domain.ts";
@@ -116,7 +116,7 @@ export default function App() {
     const earned = balance(result.snapshot.data) - balance(base.data);
     if (task.kind === "cantonese" && duration !== undefined) {
       const mins = Math.min(30, Math.floor(duration / 60));
-      const goalHint = mins >= 30 ? " · 已计入周目标！" : " · 未满30分未计入周目标";
+      const goalHint = mins >= 30 ? " · 口语进度+1份" : " · 口语进度+半份";
       setToast(`练习完成！+${earned} 卡拉米${goalHint}`);
     } else {
       setToast(`You did it! +${earned} 卡拉米 · 每一步都算数`);
@@ -272,11 +272,7 @@ export default function App() {
             onFinish={finish}
             onMenu={(task) => setTaskMenu(task)}
             onArrange={() => {
-              setSelection(
-                dailyTasks(data, today)
-                  .filter((task) => task.kind !== "cantonese")
-                  .map((task) => task.id),
-              );
+              setSelection(dailyTasks(data, today).map((task) => task.id));
               setChooser(true);
             }}
             onTodo={() => changePage("pool")}
@@ -417,19 +413,7 @@ export default function App() {
           sync={sync}
           update={update}
           close={() => setChooser(false)}
-          candidates={data.tasks
-            .filter(
-              (task) => schedulable(task, today) && task.kind !== "cantonese",
-            )
-            .sort(
-              (a, b) =>
-                a.priority - b.priority ||
-                (a.kind === "cantonese" && b.kind === "english"
-                  ? -1
-                  : a.kind === "english" && b.kind === "cantonese"
-                    ? 1
-                    : 0),
-            )}
+          candidates={chooserCandidates(data, today, selection)}
           selection={selection}
           setSelection={setSelection}
           today={today}

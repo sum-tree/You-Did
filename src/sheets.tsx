@@ -258,8 +258,16 @@ export function ChooserSheet({
       <button
         className="primary"
         onClick={async () => {
+          // Save only what the panel shows, so hidden duplicates of a weekly
+          // series never sneak into today's list.
+          const visible = new Set(candidates.map((task) => task.id));
           const result = await update(
-            (previous) => chooseDaily(previous, localDate(), selection),
+            (previous) =>
+              chooseDaily(
+                previous,
+                localDate(),
+                selection.filter((id) => visible.has(id)),
+              ),
             base,
           );
           if (!result) return;
@@ -510,7 +518,7 @@ export function SettingsSheet({
           每周目标：香港揾工 +10，超出15份后每3份 +4；大胆说口语 +7，听力每10分钟 +2。基础目标完成后自动补领挑战奖励，未满一档不发分，也不跨周累计。
         </p>
         <p>
-          香港揾工：本周投递15份简历，且本周安排的测试/笔试和面试全部完成。没有测试或面试安排时进度只看简历；有安排时简历与测试/面试各占一半。临时新增面试会让进度下降，但已发奖励不收回。提前完成的面试计入原计划周。大胆说口语：粤语30分钟×2次，以及英语面试题×9题。
+          香港揾工：本周投递15份简历，且本周安排的测试/笔试和面试全部完成。没有测试或面试安排时进度只看简历；有安排时简历与测试/面试各占一半。临时新增面试会让进度下降，但已发奖励不收回。提前完成的面试计入原计划周。大胆说口语：粤语4份 + 英语2份即为100%，每份等值；粤语满30分钟算1份、15–29分钟算半份，英语每完成1条练习算1份，超出部分暂不计入。
         </p>
         <p>
           每周自动在待办生成：香港秋招简历x5（3条）、英语面试练习3题（3条）、粤语30分钟（2条）。自动安排时，每日先放一条简历，再放普通任务，列表不到3条时加一条英语（英语做完后才轮到粤语）；同一系列每天只安排一条，英语和粤语不同天出现。手动安排时不套用这些规则。新的一周开始时，上周未完成的自动任务移入「已清空」，可恢复。
