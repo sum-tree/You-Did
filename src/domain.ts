@@ -917,7 +917,16 @@ export function ensureWeek(data: AppData, date: string): AppData {
         createdAt: `${week}T00:00:00`,
       });
     }
-  return { ...data, tasks, autoWeek: week, courseWeek: nextCourseWeek };
+  // Saved day plans may still list last week's removed auto tasks; drop those
+  // references, otherwise the rolled-over record fails validation and never saves.
+  const kept = new Set(tasks.map((task) => task.id));
+  const daily = Object.fromEntries(
+    Object.entries(data.daily).map(([day, ids]) => [
+      day,
+      ids.filter((id) => kept.has(id)),
+    ]),
+  );
+  return { ...data, tasks, daily, autoWeek: week, courseWeek: nextCourseWeek };
 }
 // Open tasks planned up to this week, or already due, may be placed on a day.
 export function schedulable(task: Task, date: string): boolean {

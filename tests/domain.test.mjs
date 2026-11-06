@@ -1482,3 +1482,14 @@ test("arrange panel shows each weekly series at most once, Cantonese included", 
     false,
   );
 });
+
+test("weekly rollover drops removed auto tasks from saved day plans", () => {
+  const lastWeek = addDays(day, -7);
+  let data = ensureWeek(emptyData(), lastWeek);
+  data = chooseDaily(data, lastWeek, [auto("resume", 2).replace(day, lastWeek)]);
+  assert.equal(validateData(data), true);
+  const next = ensureWeek(data, day);
+  assert.equal(next.autoWeek, day);
+  assert.deepEqual(next.daily[lastWeek], []);
+  assert.equal(validateData(next), true);
+});
