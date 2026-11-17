@@ -463,6 +463,34 @@ main {
 .course .goal-value strong {
   color: #9583aa;
 }
+.goal-card.streak {
+  margin-top: 0;
+  margin-bottom: 22px;
+}
+.goal-heading.streak-heading {
+  margin-bottom: 0;
+}
+.streak .goal-icon {
+  background: #f1efe7;
+  color: #8f9484;
+}
+.streak .goal-value strong {
+  color: #7c8277;
+}
+.streak.is-active .goal-icon {
+  background: #fbe8da;
+  color: #bd6a3d;
+}
+.streak.is-active .goal-value strong {
+  color: #a65b33;
+}
+.streak.is-checked .goal-icon {
+  background: #f9dec8;
+  color: #b44f2e;
+}
+.streak.is-checked .goal-value strong {
+  color: #b44f2e;
+}
 .reward-history > div {
   display: flex;
   justify-content: space-between;

@@ -1,5 +1,12 @@
-import { ChevronRight } from "lucide-react";
-import { addDays, balance, monthBalance, weekStart, weekStats } from "../domain.ts";
+import { ChevronRight, Flame } from "lucide-react";
+import {
+  addDays,
+  balance,
+  cantoneseStreak,
+  monthBalance,
+  weekStart,
+  weekStats,
+} from "../domain.ts";
 import type { AppData } from "../domain.ts";
 import { categoryIcon, KalamiIcon, Progress, shortDate } from "../components.tsx";
 
@@ -15,6 +22,7 @@ export function AchievementPage({
   const currentMonth = today.slice(0, 7);
   const monthTotal = monthBalance(data, currentMonth);
   const totalBalance = balance(data);
+  const { streak, checkedInToday } = cantoneseStreak(data, today);
   return (
     <>
       <p className="week-range">
@@ -47,6 +55,30 @@ export function AchievementPage({
             ))
         )}
       </details>
+      <section
+        className={`goal-card streak ${streak > 0 ? "is-active" : ""} ${checkedInToday ? "is-checked" : ""}`}
+        aria-label={`粤语连续打卡：${streak} 天`}
+      >
+        <div className="goal-heading streak-heading">
+          <span className="goal-icon">
+            <Flame size={20} />
+          </span>
+          <h3>粤语连续打卡</h3>
+          <span className="goal-value">
+            <strong>
+              {streak}
+              <small> 天</small>
+            </strong>
+            <small>
+              {checkedInToday
+                ? "今日已打卡"
+                : streak > 0
+                  ? "今日待打卡"
+                  : "暂无打卡"}
+            </small>
+          </span>
+        </div>
+      </section>
       <h2 className="section-title">待办项</h2>
       <section className="goal-card job">
         <div className="goal-heading">

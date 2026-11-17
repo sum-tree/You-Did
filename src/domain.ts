@@ -319,6 +319,28 @@ export function speechGoalMet(units: { cantonese: number; english: number }) {
 function ratio(value: number, target: number): number {
   return target === 0 ? 1 : Math.min(1, value / target);
 }
+export function cantoneseStreak(
+  data: AppData,
+  today: string,
+): { streak: number; checkedInToday: boolean } {
+  const dates = new Set(
+    data.completions
+      .filter((item) => item.kind === "cantonese" && validDate(item.date))
+      .map((item) => item.date),
+  );
+  const checkedInToday = dates.has(today);
+  let cursor = checkedInToday
+    ? today
+    : dates.has(addDays(today, -1))
+      ? addDays(today, -1)
+      : null;
+  let streak = 0;
+  while (cursor && dates.has(cursor)) {
+    streak += 1;
+    cursor = addDays(cursor, -1);
+  }
+  return { streak, checkedInToday };
+}
 export function weekStats(data: AppData, week: string) {
   const records = data.completions.filter((item) => item.week === week);
   const sum = (kind: Contribution) =>

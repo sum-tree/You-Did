@@ -5,6 +5,7 @@ import {
   archiveTasks,
   balance,
   buildInterviewSteps,
+  cantoneseStreak,
   chooseDaily,
   chooserCandidates,
   cleanupDuplicateTasks,
@@ -1492,4 +1493,55 @@ test("weekly rollover drops removed auto tasks from saved day plans", () => {
   assert.equal(next.autoWeek, day);
   assert.deepEqual(next.daily[lastWeek], []);
   assert.equal(validateData(next), true);
+});
+
+test("cantoneseStreak counts consecutive days of Cantonese completions", () => {
+  let data = emptyData();
+  assert.deepEqual(cantoneseStreak(data, "2026-10-15"), {
+    streak: 0,
+    checkedInToday: false,
+  });
+
+  // Non-cantonese completions do not count
+  data = saveTask(data, task("en", "english", 3), "2026-10-15");
+  data = completeTask(data, "en", "2026-10-15");
+  assert.deepEqual(cantoneseStreak(data, "2026-10-15"), {
+    streak: 0,
+    checkedInToday: false,
+  });
+
+  // Consecutive days across week & month boundaries (Dec 30, Dec 31, Jan 1)
+  let yearData = ensureWeek(emptyData(), "2026-12-30");
+  yearData = completeTask(yearData, auto("cantonese", 1, "2026-12-28"), "2026-12-30", 1800);
+  // 15-minute session also counts as a daily Cantonese check-in
+  yearData = completeTask(yearData, auto("cantonese", 2, "2026-12-28"), "2026-12-31", 900);
+  // Multiple completions on the same day count as 1 day
+  yearData = saveTask(yearData, task("c-extra", "cantonese", 1), "2026-12-31");
+  yearData = completeTask(yearData, "c-extra", "2026-12-31");
+
+  // On Jan 1 before checking in today, streak from yesterday is still alive
+  assert.deepEqual(cantoneseStreak(yearData, "2027-01-01"), {
+    streak: 2,
+    checkedInToday: false,
+  });
+
+  // After checking in on Jan 1, streak increments to 3
+  yearData = completeTask(yearData, auto("cantonese", 3, "2026-12-28"), "2027-01-01", 1800);
+  assert.deepEqual(cantoneseStreak(yearData, "2027-01-01"), {
+    streak: 3,
+    checkedInToday: true,
+  });
+
+  // Undoing today's completion reverts checkedInToday and decrements streak
+  const undone = uncompleteTask(yearData, auto("cantonese", 3, "2026-12-28"), "2027-01-01");
+  assert.deepEqual(cantoneseStreak(undone, "2027-01-01"), {
+    streak: 2,
+    checkedInToday: false,
+  });
+
+  // Missing a full day (checking on Jan 2 when Jan 1 was missed) resets streak to 0
+  assert.deepEqual(cantoneseStreak(undone, "2027-01-02"), {
+    streak: 0,
+    checkedInToday: false,
+  });
 });
