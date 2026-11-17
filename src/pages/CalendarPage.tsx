@@ -2,31 +2,33 @@ import { useMemo } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import {
   addDays,
-  calendarItemsByDate,
+  calendarDayItems,
   dateObject,
   localDate,
   weekStart,
 } from "../domain.ts";
-import type { CalendarEvent, Task } from "../domain.ts";
+import type { AppData } from "../domain.ts";
 import { longDate } from "../components.tsx";
 
 export function CalendarPage({
-  events,
-  tasks = [],
+  data,
   today,
   month,
   setMonth,
   selectedDate,
   setSelectedDate,
+  showAllTasks,
+  setShowAllTasks,
   openDay,
 }: {
-  events: CalendarEvent[];
-  tasks?: Task[];
+  data: AppData;
   today: string;
   month: string;
   setMonth: (month: string) => void;
   selectedDate: string;
   setSelectedDate: (date: string) => void;
+  showAllTasks: boolean;
+  setShowAllTasks: (value: boolean) => void;
   openDay: (date: string) => void;
 }) {
   const firstOfMonth = `${month.slice(0, 7)}-01`;
@@ -36,10 +38,9 @@ export function CalendarPage({
     setMonth(localDate(d));
   };
 
-  // Dynamically project manual calendar events and task DDLs onto calendar days
   const itemsByDate = useMemo(
-    () => calendarItemsByDate(events, tasks),
-    [events, tasks],
+    () => calendarDayItems(data, today, showAllTasks),
+    [data, today, showAllTasks],
   );
 
   return (
@@ -119,15 +120,40 @@ export function CalendarPage({
           );
         })}
       </div>
-      <button
-        className="text-button calendar-today"
-        onClick={() => {
-          setMonth(`${today.slice(0, 7)}-01`);
-          setSelectedDate(today);
-        }}
-      >
-        回到今天
-      </button>
+      <div className="calendar-footer">
+        <div
+          className="cal-view-switch"
+          role="group"
+          aria-label="日历显示模式"
+        >
+          <button
+            type="button"
+            aria-pressed={!showAllTasks}
+            className={!showAllTasks ? "active" : ""}
+            onClick={() => setShowAllTasks(false)}
+          >
+            仅日历事项
+          </button>
+          <button
+            type="button"
+            aria-pressed={showAllTasks}
+            className={showAllTasks ? "active" : ""}
+            onClick={() => setShowAllTasks(true)}
+          >
+            显示全部任务
+          </button>
+        </div>
+        <button
+          type="button"
+          className="text-button calendar-today"
+          onClick={() => {
+            setMonth(`${today.slice(0, 7)}-01`);
+            setSelectedDate(today);
+          }}
+        >
+          回到今天
+        </button>
+      </div>
     </section>
   );
 }

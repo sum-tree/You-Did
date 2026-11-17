@@ -69,6 +69,7 @@ export default function App() {
   const [poolView, setPoolView] = useState(initialPoolView);
   const [month, setMonth] = useState(() => `${localDate().slice(0, 7)}-01`);
   const [selectedDate, setSelectedDate] = useState(localDate);
+  const [showAllCalendarTasks, setShowAllCalendarTasks] = useState(false);
   useEffect(() => {
     pruneCantoneseTimers(data.tasks);
   }, [data.tasks]);
@@ -102,14 +103,6 @@ export default function App() {
       if (!result) return;
       const taken = balance(base.data) - balance(result.snapshot.data);
       setToast(`已撤销完成，收回${taken}卡拉米。`);
-      return;
-    }
-    if (
-      task.status === "open" &&
-      task.kind === "cantonese" &&
-      duration === undefined
-    ) {
-      setToast("请使用下方计时器练习满 15 分钟后再结算哦～");
       return;
     }
     if (task.status === "open" && task.steps && task.steps.length > 0) {
@@ -153,23 +146,49 @@ export default function App() {
       setToast(getStepEncouragement(targetStep.title));
     }
   }
-  async function commitTask(task: Task, todaySelected: boolean) {
+  async function commitTask(
+    task: Task,
+    todaySelected: boolean,
+    addToCalendar?: boolean,
+  ) {
     if (!app.canChange()) return;
     const date = localDate();
     const result = await update((previous) => {
-      const next = saveTask(previous, task, date);
-      return todaySelected
-        ? chooseDaily(next, date, [
-            ...dailyTasks(previous, date).map((item) => item.id),
-            task.id,
-          ])
-        : next;
+      let next = saveTask(previous, task, date);
+      if (todaySelected) {
+        next = chooseDaily(next, date, [
+          ...dailyTasks(previous, date).map((item) => item.id),
+          task.id,
+        ]);
+      }
+      if (addToCalendar && task.dueDate) {
+        const exists = next.events.some(
+          (e) => e.date === task.dueDate && e.title === task.title,
+        );
+        if (!exists) {
+          next = {
+            ...next,
+            events: [
+              ...next.events,
+              {
+                id: crypto.randomUUID(),
+                title: task.title,
+                date: task.dueDate,
+                time: "",
+                kind: task.kind === "interview" ? "interview" : "deadline",
+                note: "",
+              },
+            ],
+          };
+        }
+      }
+      return next;
     }, taskFormBase.current);
     if (!result) return;
     setTaskForm(null);
     setToast(
-      task.dueDate
-        ? "任务已保存，截止日期已自动同步至日历。"
+      addToCalendar && task.dueDate
+        ? "任务已保存，并已加入日历提醒。"
         : "任务已保存，小小的一步也很棒。",
     );
   }
@@ -290,13 +309,14 @@ export default function App() {
         )}
         {page === "calendar" && (
           <CalendarPage
-            events={data.events}
-            tasks={data.tasks}
+            data={data}
             today={today}
             month={month}
             setMonth={setMonth}
             selectedDate={selectedDate}
             setSelectedDate={setSelectedDate}
+            showAllTasks={showAllCalendarTasks}
+            setShowAllTasks={setShowAllCalendarTasks}
             openDay={(date) => setDaySheet(date)}
           />
         )}
@@ -422,16 +442,12 @@ export default function App() {
           notify={setToast}
           close={() => setDaySheet(null)}
           date={daySheet}
-          events={data.events}
-          tasks={data.tasks}
+          data={data}
+          today={today}
+          showAllTasks={showAllCalendarTasks}
           base={daySheetBase.current}
           onEdit={(event, base) => {
             setEventForm(event, base);
-            setDaySheet(null);
-          }}
-          onAddEvent={() => {
-            setSelectedDate(daySheet);
-            setEventForm("new", daySheetBase.current);
             setDaySheet(null);
           }}
           onOpenTask={(task, base) => {

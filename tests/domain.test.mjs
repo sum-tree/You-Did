@@ -42,7 +42,7 @@ import {
   yearlyMonthsStats,
   getStartMonth,
   visibleYearlyMonthsStats,
-  calendarItemsByDate,
+  calendarDayItems,
   detectJobFormMode,
   MAX_INTERVIEW_STEPS,
   moveTasksToCurrentWeek,
@@ -1741,84 +1741,81 @@ test("moveTasksToCurrentWeek pulls future custom tasks back to current week with
   assert.equal(validateData(moved), true);
 });
 
-test("calendarItemsByDate dynamically projects task DDLs, preserves manual events, and deduplicates legacy blank copies", () => {
-  const tOpen = task("t1", "interview", 1, {
-    title: "Cathay 终面",
-    category: "job",
+test("cantonese task can also be settled directly without timer duration for 2 kalami and 1 unit", () => {
+  const cTaskId = `auto:${day}:cantonese:1`;
+  let data = ensureWeek(emptyData(), day);
+  data = completeTask(data, cTaskId, day);
+  assert.equal(balance(data), 2);
+  const doneTask = data.tasks.find((t) => t.id === cTaskId);
+  assert.equal(doneTask.status, "done");
+  assert.equal(doneTask.amount, 1);
+  assert.equal(doneTask.duration, undefined);
+  assert.equal(weekStats(data, day).speechCantoneseUnits, 1);
+  assert.equal(validateData(data), true);
+});
+
+test("calendarDayItems defaults to manual events only and includes all tasks when showAllTasks is true", () => {
+  const todayDate = "2026-10-14";
+  const dueTask = task("t_due", "course", 1, {
+    title: "CS5187 作业提交",
+    category: "course",
     dueDate: "2026-10-20",
   });
-  const tArchived = task("t2", "course", 1, {
-    title: "已清空作业",
+  const dupTitleTask = task("t_iv", "interview", 1, {
+    title: "HSBC 一面",
+    category: "job",
+    dueDate: "2026-10-18",
+  });
+  const archivedTask = task("t_arch", "none", 1, {
+    title: "已清空任务",
     category: "course",
     dueDate: "2026-10-20",
     status: "archived",
   });
-  const events = [
-    // Legacy blank auto-created duplicate matching tOpen on 2026-10-20 -> skipped
-    {
-      id: "ev-legacy",
-      title: "Cathay 终面",
-      date: "2026-10-20",
-      time: "",
-      kind: "interview",
-      note: "",
-    },
-    // Manual event with time/note even with same title -> preserved!
-    {
-      id: "ev-timed",
-      title: "Cathay 终面",
-      date: "2026-10-20",
-      time: "14:30",
-      kind: "interview",
-      note: "Zoom 链接在邮箱",
-    },
-    // Two distinct manual events with identical titles on another date -> both preserved!
-    {
-      id: "ev-dup-1",
-      title: "复盘打卡",
-      date: "2026-10-21",
-      time: "",
-      kind: "reminder",
-      note: "",
-    },
-    {
-      id: "ev-dup-2",
-      title: "复盘打卡",
-      date: "2026-10-21",
-      time: "",
-      kind: "reminder",
-      note: "",
-    },
-  ];
+  let data = ensureWeek(dataWith(dueTask, dupTitleTask, archivedTask), todayDate);
+  data = completeTask(data, `auto:${day}:cantonese:1`, "2026-10-13");
+  data = {
+    ...data,
+    events: [
+      {
+        id: "ev1",
+        title: "HSBC 一面",
+        date: "2026-10-18",
+        time: "",
+        kind: "interview",
+        note: "",
+      },
+      {
+        id: "ev2",
+        title: "宣讲会提醒",
+        date: "2026-10-19",
+        time: "",
+        kind: "reminder",
+        note: "",
+      },
+    ],
+  };
 
-  let data = { ...dataWith(tOpen, tArchived), events };
-  let map = calendarItemsByDate(data.events, data.tasks);
+  // Default mode (showAllTasks = false): only manual calendar events
+  const eventsOnly = calendarDayItems(data, todayDate, false);
+  assert.equal((eventsOnly.get("2026-10-18") ?? []).length, 1);
+  assert.equal((eventsOnly.get("2026-10-19") ?? [])[0].kind, "reminder");
+  assert.equal(eventsOnly.get("2026-10-20"), undefined);
+  assert.equal(eventsOnly.get("2026-10-13"), undefined);
+  assert.equal(eventsOnly.get(todayDate), undefined);
 
-  const oct20 = map.get("2026-10-20") ?? [];
-  assert.equal(oct20.length, 2);
-  assert.equal(oct20[0].id, "ev-ev-timed");
-  assert.equal(oct20[0].time, "14:30");
-  assert.equal(oct20[1].id, "task-t1");
-  assert.equal(oct20[1].done, false);
-
-  const oct21 = map.get("2026-10-21") ?? [];
-  assert.equal(oct21.length, 2);
-
-  // Updating task DDL moves it automatically to the new date
-  const movedTask = { ...tOpen, dueDate: "2026-10-25" };
-  data = saveTask(data, movedTask, day);
-  map = calendarItemsByDate(data.events, data.tasks);
-  assert.equal(
-    (map.get("2026-10-25") ?? []).some((i) => i.id === "task-t1"),
-    true,
-  );
-
-  // Completing the task marks done: true on the calendar item
-  data = completeTask(data, "t1", day);
-  map = calendarItemsByDate(data.events, data.tasks);
-  assert.equal(
-    (map.get("2026-10-25") ?? []).find((i) => i.id === "task-t1")?.done,
-    true,
-  );
+  // All tasks mode (showAllTasks = true): includes due tasks, today's daily tasks, and completed tasks
+  const allItems = calendarDayItems(data, todayDate, true);
+  // 2026-10-20 shows dueTask, excludes archivedTask
+  assert.equal((allItems.get("2026-10-20") ?? []).length, 1);
+  assert.equal((allItems.get("2026-10-20") ?? [])[0].title, "CS5187 作业提交");
+  // 2026-10-18 deduplicates task sharing same title & date as manual event
+  assert.equal((allItems.get("2026-10-18") ?? []).length, 1);
+  // 2026-10-13 shows completed Cantonese task with done: true
+  const oct13 = allItems.get("2026-10-13") ?? [];
+  assert.equal(oct13.length, 1);
+  assert.equal(oct13[0].done, true);
+  // Today shows today's scheduled open daily tasks
+  assert.ok((allItems.get(todayDate) ?? []).length >= 2);
 });
 

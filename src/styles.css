@@ -242,10 +242,6 @@ main {
   position: absolute;
   inset: -11px;
 }
-.task-check.timer-only {
-  border-style: dashed;
-  border-color: #b7bfa6;
-}
 .task-check:hover {
   border-color: #7b8b67;
   background: #f2f3e7;
@@ -590,25 +586,7 @@ main {
   border-color: #d8decd;
 }
 .calendar-grid .calendar-day-btn.is-past {
-  background: #fafaf6;
-  border-color: #eff1e8;
-}
-.calendar-grid .calendar-day-btn.is-past .cal-day-num {
-  color: #959c8a;
-}
-.calendar-grid .calendar-day-btn.is-past .cal-task-pill {
-  opacity: 0.78;
-}
-.calendar-grid .calendar-day-btn.other-month {
-  background: #f4f4ed;
-  border-color: #eceee3;
-}
-.calendar-grid .calendar-day-btn.other-month .cal-day-num {
-  color: #b7bca9;
-  font-weight: 500;
-}
-.calendar-grid .calendar-day-btn.other-month .cal-task-pill {
-  opacity: 0.55;
+  opacity: 0.45;
 }
 .calendar-grid .calendar-day-btn.today {
   border-color: #c49970;
@@ -687,7 +665,8 @@ main {
   background: #f3effa;
   color: #5d38b0;
 }
-.cal-task-pill.deadline {
+.cal-task-pill.deadline,
+.cal-task-pill.reminder {
   background: #fdede6;
   color: #9e431d;
 }
@@ -702,10 +681,6 @@ main {
 .cal-task-pill.course {
   background: #e2f2f8;
   color: #176880;
-}
-.cal-task-pill.reminder {
-  background: #eff2eb;
-  color: #535e49;
 }
 .cal-task-pill.done {
   opacity: 0.55;
@@ -784,10 +759,43 @@ main {
     padding: 0 2.5px;
   }
 }
-.calendar-today {
+.calendar-footer {
   display: flex;
-  margin: 7px auto 0;
-  min-height: 30px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 8px;
+  padding: 0 4px;
+}
+.cal-view-switch {
+  display: inline-flex;
+  align-items: center;
+  background: #f1f2ea;
+  border: 1px solid #e3e6d8;
+  border-radius: 9px;
+  padding: 2px;
+  gap: 2px;
+}
+.cal-view-switch > button {
+  font-size: 11px;
+  color: #7c8274;
+  padding: 4px 9px;
+  min-height: 28px;
+  border-radius: 7px;
+  font-weight: 550;
+  transition: background 0.15s, color 0.15s;
+}
+.cal-view-switch > button.active {
+  background: #fffefa;
+  color: #3f543b;
+  font-weight: 650;
+  box-shadow: 0 1px 2px rgba(48, 58, 50, 0.08);
+}
+.calendar-today {
+  display: inline-flex;
+  margin: 0;
+  min-height: 32px;
+  padding: 0 6px;
 }
 .event-stack {
   display: flex;
@@ -808,8 +816,8 @@ main {
 .event-icon {
   display: grid;
   place-items: center;
-  background: #e8eddf;
-  color: #8b9a74;
+  background: #fdede6;
+  color: #9e431d;
   width: 36px;
   height: 36px;
   border-radius: 11px;
@@ -837,32 +845,31 @@ main {
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
-.event-card.deadline .event-icon {
-  background: #f5e9d7;
-  color: #b18e5d;
+.event-card.deadline .event-icon,
+.event-card.reminder .event-icon {
+  background: #fdede6;
+  color: #9e431d;
 }
-.event-card.interview .event-icon {
-  background: #ebe7f2;
-  color: #9585ac;
+.event-card.interview .event-icon,
+.event-card .event-icon.interview {
+  background: #f3effa;
+  color: #5d38b0;
 }
 .event-card .event-icon.job {
-  background: #f6e7d5;
-  color: #99633c;
+  background: #faeedf;
+  color: #8a4e15;
 }
 .event-card .event-icon.speech {
-  background: #e8eddf;
-  color: #667a4a;
+  background: #e9f5ea;
+  color: #237427;
 }
 .event-card .event-icon.course {
-  background: #ede9f3;
-  color: #7c7094;
+  background: #e2f2f8;
+  color: #176880;
 }
 .event-card.task-ddl-card.is-done strong {
   text-decoration: line-through;
   color: #979b8d;
-}
-.day-sheet-add {
-  margin-top: 14px;
 }
 .toast {
   position: fixed;

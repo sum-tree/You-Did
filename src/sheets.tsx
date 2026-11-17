@@ -16,6 +16,7 @@ import {
   archiveTasks,
   balance,
   buildInterviewSteps,
+  calendarDayItems,
   CATEGORY,
   chooseDaily,
   dailyTasks,
@@ -335,49 +336,30 @@ export function DaySheet({
   notify,
   close,
   date,
-  events,
-  tasks,
+  data,
+  today,
+  showAllTasks,
   base,
   onEdit,
-  onAddEvent,
   onOpenTask,
   rebase,
 }: SheetProps & {
   date: string;
-  events: CalendarEvent[];
-  tasks: Task[];
+  data: AppData;
+  today: string;
+  showAllTasks: boolean;
   base: Snapshot;
   onEdit: (event: CalendarEvent, base: Snapshot) => void;
-  onAddEvent: () => void;
   onOpenTask: (task: Task, base: Snapshot) => void;
   rebase: (snapshot: Snapshot) => void;
 }) {
-  const dayTasks = tasks
-    .filter((task) => task.status !== "archived" && task.dueDate === date)
-    .sort(
-      (a, b) =>
-        (a.status === "open" ? 0 : 1) - (b.status === "open" ? 0 : 1) ||
-        a.priority - b.priority ||
-        a.createdAt.localeCompare(b.createdAt),
-    );
-  const taskTitles = new Set(dayTasks.map((t) => t.title.trim()));
-  const dayEvents = events
-    .filter(
-      (event) =>
-        event.date === date &&
-        !(
-          !event.time &&
-          !event.note &&
-          taskTitles.has(event.title.trim())
-        ),
-    )
-    .sort((a, b) =>
-      (a.time || "99:99").localeCompare(b.time || "99:99") ||
-      a.id.localeCompare(b.id),
-    );
-
-  const hasContent = dayEvents.length > 0 || dayTasks.length > 0;
-
+  const dayEvents = data.events.filter((event) => event.date === date);
+  const dayTaskItems = showAllTasks
+    ? (calendarDayItems(data, today, true).get(date) ?? []).filter(
+        (item) => item.source === "task" && item.task,
+      )
+    : [];
+  const hasContent = dayEvents.length > 0 || dayTaskItems.length > 0;
   return (
     <Modal {...sync} title={longDate(date, true)} close={close}>
       {hasContent ? (
@@ -434,20 +416,23 @@ export function DaySheet({
               </span>
             </article>
           ))}
-          {dayTasks.map((task) => {
+          {dayTaskItems.map((item) => {
+            const task = item.task!;
             const done = task.status === "done";
             return (
               <article
-                className={`event-card task-ddl-card ${task.kind === "interview" ? "interview" : "deadline"} ${done ? "is-done" : ""}`}
-                key={`task-${task.id}`}
+                className={`event-card task-ddl-card ${task.kind === "interview" ? "interview" : task.category} ${done ? "is-done" : ""}`}
+                key={item.id}
               >
-                <span className={`event-icon ${task.category}`}>
+                <span
+                  className={`event-icon ${task.kind === "interview" ? "interview" : task.category}`}
+                >
                   {categoryIcon(task.category, 18)}
                 </span>
                 <span>
                   <small>
-                    {CATEGORY[task.category].name} · 任务截止
-                    {done ? " · 已完成" : ""}
+                    {CATEGORY[task.category].name}
+                    {item.taskNote ? ` · ${item.taskNote}` : ""}
                   </small>
                   <strong>{task.title}</strong>
                   <span className="event-actions">
@@ -456,7 +441,7 @@ export function DaySheet({
                       aria-label={`查看任务操作：${task.title}`}
                       onClick={() => onOpenTask(task, base)}
                     >
-                      {done ? "查看详情" : "调整 / 操作任务"}
+                      {done ? "查看详情" : "任务操作"}
                       <ArrowRight size={13} />
                     </button>
                   </span>
@@ -466,16 +451,10 @@ export function DaySheet({
           })}
         </div>
       ) : (
-        <p className="empty-line">这一天暂无提醒或截止任务。</p>
+        <p className="empty-line">
+          {showAllTasks ? "这一天暂无重要事项或任务。" : "这一天暂无重要事项。"}
+        </p>
       )}
-      <button
-        type="button"
-        className="outline-button full day-sheet-add"
-        onClick={onAddEvent}
-      >
-        <Plus size={16} />
-        添加当天事项
-      </button>
     </Modal>
   );
 }
@@ -668,7 +647,7 @@ export function SettingsSheet({
       <div className="settings-section">
         <h3>奖励与排期规则</h3>
         <p>
-          完成任务：普通任务 +2，简历投递 +4，测试/笔试 +8，英语面试题 +4，听力 +2，课程作业 +1；粤语口语通过计时器结算（满15分钟 +1，满30分钟 +2）。面试按添加后第几天完成：0–3天 +12，4–6天 +4，7–10天 +2，更晚 +1，与截止日期无关。
+          完成任务：普通任务 +2，简历投递 +4，测试/笔试 +8，英语面试题 +4，听力 +2，课程作业 +1；粤语口语 +2（使用计时器满15分钟 +1、满30分钟 +2，也可直接勾选完成 +2）。面试按添加后第几天完成：0–3天 +12，4–6天 +4，7–10天 +2，更晚 +1，与截止日期无关。
         </p>
         <p>
           每周目标：香港揾工 +10，超出15份后每3份 +4；大胆说口语 +7，听力每10分钟 +2。基础目标完成后自动补领挑战奖励，未满一档不发分，也不跨周累计。
@@ -680,7 +659,7 @@ export function SettingsSheet({
           每周自动生成：香港秋招简历x5（3条）、粤语30分钟（7条）、英语面试练习3题（3条）。自动安排时，每日默认预留1条粤语与1条简历，穿插逾期或高优普通任务；本周完成2次粤语后，若当日列表未满3项会自动加入1条英语。新的一周开始时，上周未完成的自动任务自动清理，不会堆积到「已清空」。
         </p>
         <p>
-          日历联动与撤销：所有带截止日期的任务自动同步显示在日历中。清空、编辑或跨周移动任务均不扣回已得卡拉米；当天误点完成可在任务菜单或勾选框「撤销完成」，隔天后不可撤销。
+          撤销与调整：清空、编辑或跨周移动任务均不扣回已得卡拉米；当天误点完成可在任务菜单或勾选框「撤销完成」，隔天后不可撤销。日历事项独立用于提醒，不自动计入任务或发放积分。
         </p>
       </div>
       <div className="settings-foot">

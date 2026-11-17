@@ -955,73 +955,115 @@ export function moveTasksToCurrentWeek(
   };
 }
 
-export interface CalendarCellItem {
+export interface CalendarDisplayItem {
   id: string;
   title: string;
-  kind: string;
+  kind: "interview" | "deadline" | "reminder" | Category;
   done?: boolean;
-  time?: string;
   source: "event" | "task";
+  event?: CalendarEvent;
+  task?: Task;
+  taskNote?: string;
 }
 
-export function calendarItemsByDate(
-  events: CalendarEvent[],
-  tasks: Task[],
-): Map<string, CalendarCellItem[]> {
-  const map = new Map<string, CalendarCellItem[]>();
-  const taskKeysOnDate = new Set<string>();
+export function calendarDayItems(
+  data: AppData,
+  today: string,
+  showAllTasks = false,
+): Map<string, CalendarDisplayItem[]> {
+  const map = new Map<string, CalendarDisplayItem[]>();
+  const eventTitlesByDate = new Map<string, Set<string>>();
 
-  const activeTasksWithDue = tasks
-    .filter((t) => t.status !== "archived" && Boolean(t.dueDate))
-    .sort(
-      (a, b) =>
-        (a.status === "open" ? 0 : 1) - (b.status === "open" ? 0 : 1) ||
-        a.priority - b.priority ||
-        a.createdAt.localeCompare(b.createdAt),
-    );
-
-  for (const task of activeTasksWithDue) {
-    taskKeysOnDate.add(`${task.dueDate}::${task.title.trim()}`);
-  }
-
-  const sortedEvents = [...events]
-    .filter((e) => Boolean(e.date))
-    .sort((a, b) =>
-      (a.time || "99:99").localeCompare(b.time || "99:99") ||
-      a.id.localeCompare(b.id),
-    );
-
-  for (const event of sortedEvents) {
+  for (const event of data.events) {
+    if (!event.date) continue;
     const trimmed = event.title.trim();
-    // Skip legacy auto-duplicated blank calendar event when the live task DDL is on the same date
-    if (
-      !event.time &&
-      !event.note &&
-      taskKeysOnDate.has(`${event.date}::${trimmed}`)
-    ) {
-      continue;
+    let titles = eventTitlesByDate.get(event.date);
+    if (!titles) {
+      titles = new Set();
+      eventTitlesByDate.set(event.date, titles);
     }
+    if (titles.has(trimmed)) continue;
+    titles.add(trimmed);
     const list = map.get(event.date) ?? [];
     list.push({
       id: `ev-${event.id}`,
-      title: trimmed,
+      title: event.title,
       kind: event.kind,
-      time: event.time,
       source: "event",
+      event,
     });
     map.set(event.date, list);
   }
 
-  for (const task of activeTasksWithDue) {
-    const list = map.get(task.dueDate) ?? [];
+  if (!showAllTasks) {
+    return map;
+  }
+
+  const tasksById = new Map(data.tasks.map((t) => [t.id, t]));
+  const addedTaskIdsByDate = new Map<string, Set<string>>();
+
+  const addTaskOnDate = (
+    date: string,
+    task: Task,
+    done: boolean,
+    taskNote: string,
+  ) => {
+    if (!date || task.status === "archived") return;
+    const seenIds = addedTaskIdsByDate.get(date) ?? new Set<string>();
+    if (seenIds.has(task.id)) return;
+    if (eventTitlesByDate.get(date)?.has(task.title.trim())) return;
+    seenIds.add(task.id);
+    addedTaskIdsByDate.set(date, seenIds);
+
+    const list = map.get(date) ?? [];
     list.push({
       id: `task-${task.id}`,
-      title: task.title.trim(),
+      title: task.title,
       kind: task.kind === "interview" ? "interview" : task.category,
-      done: task.status === "done",
+      done,
       source: "task",
+      task,
+      taskNote,
     });
-    map.set(task.dueDate, list);
+    map.set(date, list);
+  };
+
+  const openTasksWithDue = data.tasks
+    .filter((t) => t.status === "open" && Boolean(t.dueDate))
+    .sort(
+      (a, b) =>
+        a.priority - b.priority || a.createdAt.localeCompare(b.createdAt),
+    );
+  for (const task of openTasksWithDue) {
+    addTaskOnDate(task.dueDate, task, false, "截止任务");
+  }
+
+  for (const task of dailyTasks(data, today)) {
+    if (task.status === "open") {
+      addTaskOnDate(
+        today,
+        task,
+        false,
+        task.dueDate === today ? "今日截止" : "今日安排",
+      );
+    }
+  }
+
+  for (const [date, ids] of Object.entries(data.daily)) {
+    if (date <= today) continue;
+    for (const id of ids) {
+      const task = tasksById.get(id);
+      if (task && task.status === "open") {
+        addTaskOnDate(date, task, false, "计划安排");
+      }
+    }
+  }
+
+  for (const comp of data.completions) {
+    const task = tasksById.get(comp.taskId);
+    if (task && task.status === "done") {
+      addTaskOnDate(comp.date, task, true, "已完成");
+    }
   }
 
   return map;

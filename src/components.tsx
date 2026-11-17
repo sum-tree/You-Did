@@ -69,12 +69,11 @@ export function TaskCheck({
   onFinish: (task: Task) => void;
 }) {
   const done = task.status === "done";
-  const timerOnly = !done && task.kind === "cantonese";
   return (
     <button
       type="button"
-      className={`task-check ${done ? "checked" : ""} ${timerOnly ? "timer-only" : ""}`}
-      aria-label={`${done ? "点击撤销完成" : timerOnly ? "请使用计时器完成" : "完成任务"}：${task.title}`}
+      className={`task-check ${done ? "checked" : ""}`}
+      aria-label={`${done ? "点击撤销完成" : "完成任务"}：${task.title}`}
       onClick={() => onFinish(task)}
     >
       {done && <Check size={14} strokeWidth={2.8} />}
@@ -292,7 +291,7 @@ export function TaskForm({
   existing?: Task;
   today: string;
   defaultToday?: boolean;
-  commit: (task: Task, todaySelected: boolean) => void;
+  commit: (task: Task, todaySelected: boolean, addToCalendar?: boolean) => void;
   close?: () => void;
 }) {
   const [category, setCategory] = useState<Category>(
@@ -337,6 +336,7 @@ export function TaskForm({
         ...(steps ? { steps } : {}),
       },
       fields.get("today") === "on",
+      fields.get("addToCalendar") === "on",
     );
   };
 
@@ -438,9 +438,12 @@ export function TaskForm({
             <input name="today" type="checkbox" defaultChecked={defaultToday} />
             加入今日任务
           </label>
+          <label className="checkbox-label">
+            <input name="addToCalendar" type="checkbox" />
+            加入日历
+          </label>
         </div>
       )}
-      <p className="form-note">设置截止日期后会自动在日历显示，修改截止日实时同步。</p>
       <button className="primary" type="submit">
         {existing ? "保存修改" : "添加任务"}
         <Plus size={18} />
@@ -472,18 +475,13 @@ export function EventForm({
           input.reportValidity();
           return;
         }
-        const rawTime = String(f.get("time") ?? "")
-          .trim()
-          .slice(0, 5);
-        const time = /^([01]\d|2[0-3]):[0-5]\d$/.test(rawTime) ? rawTime : "";
-        const note = String(f.get("note") ?? "").trim();
         commit({
           id: existing?.id ?? crypto.randomUUID(),
           title,
           date: String(f.get("date")),
-          time,
+          time: existing?.time ?? "",
           kind: String(f.get("kind")) as CalendarEvent["kind"],
-          note,
+          note: existing?.note ?? "",
         });
       }}
     >
@@ -511,32 +509,14 @@ export function EventForm({
           />
         </label>
         <label>
-          时间（选填）
-          <input
-            name="time"
-            type="time"
-            defaultValue={existing?.time ?? ""}
-          />
+          事项类型
+          <select name="kind" defaultValue={existing?.kind ?? "reminder"}>
+            <option value="interview">面试 / 测试</option>
+            <option value="deadline">重要截止日期</option>
+            <option value="reminder">提醒事项</option>
+          </select>
         </label>
       </div>
-      <label>
-        事项类型
-        <select name="kind" defaultValue={existing?.kind ?? "reminder"}>
-          <option value="interview">面试 / 测试</option>
-          <option value="deadline">重要截止日期</option>
-          <option value="reminder">提醒事项</option>
-        </select>
-      </label>
-      <label>
-        备注（选填）
-        <textarea
-          name="note"
-          rows={2}
-          maxLength={1000}
-          placeholder="例如：会议链接、地点或需要携带的材料"
-          defaultValue={existing?.note ?? ""}
-        />
-      </label>
       <p className="form-note">日历事项用于提醒，不自动计入任务或发放积分。</p>
       <button className="primary" type="submit">
         {existing ? "保存事项" : "添加事项"}
