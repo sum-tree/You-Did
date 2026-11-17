@@ -31,9 +31,34 @@ interface CantoneseTimerState {
   baseElapsed: number;
 }
 
+const TIMER_PREFIX = "yd_cantonese_timer_";
+
+export function pruneCantoneseTimers(tasks: Task[]) {
+  try {
+    const activeIds = new Set(
+      tasks
+        .filter((t) => t.status === "open" && t.kind === "cantonese")
+        .map((t) => t.id),
+    );
+    const staleKeys: string[] = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (key && key.startsWith(TIMER_PREFIX)) {
+        const taskId = key.slice(TIMER_PREFIX.length);
+        if (!activeIds.has(taskId)) {
+          staleKeys.push(key);
+        }
+      }
+    }
+    for (const key of staleKeys) {
+      localStorage.removeItem(key);
+    }
+  } catch {}
+}
+
 function getSavedCantoneseTimer(taskId: string): CantoneseTimerState {
   try {
-    const raw = localStorage.getItem(`yd_cantonese_timer_${taskId}`);
+    const raw = localStorage.getItem(`${TIMER_PREFIX}${taskId}`);
     if (raw) return JSON.parse(raw);
   } catch {}
   return { running: false, startedAt: null, baseElapsed: 0 };
@@ -42,9 +67,9 @@ function getSavedCantoneseTimer(taskId: string): CantoneseTimerState {
 function saveCantoneseTimer(taskId: string, state: CantoneseTimerState | null) {
   try {
     if (!state) {
-      localStorage.removeItem(`yd_cantonese_timer_${taskId}`);
+      localStorage.removeItem(`${TIMER_PREFIX}${taskId}`);
     } else {
-      localStorage.setItem(`yd_cantonese_timer_${taskId}`, JSON.stringify(state));
+      localStorage.setItem(`${TIMER_PREFIX}${taskId}`, JSON.stringify(state));
     }
   } catch {}
 }
@@ -322,6 +347,9 @@ export function DailyPage({
                     <span className={`tag ${task.category}`}>
                       {CATEGORY[task.category].short}
                     </span>
+                    {!done && task.priority === 0 && (
+                      <span className="priority-badge">P0 优先</span>
+                    )}
                     {task.dueDate && !done && (
                       <span
                         className={`due ${task.dueDate < today ? "late" : ""}`}

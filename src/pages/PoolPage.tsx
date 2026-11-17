@@ -126,7 +126,8 @@ export function PoolPage({
           </select>
           <select
             aria-label="计划周筛选"
-            value={week}
+            value={status === "archived" ? "all" : week}
+            disabled={status === "archived"}
             onChange={(e) =>
               setView({
                 ...view,
@@ -135,9 +136,15 @@ export function PoolPage({
               })
             }
           >
-            <option value="current">本周</option>
-            <option value="next">下周</option>
-            <option value="past">往周</option>
+            {status === "archived" ? (
+              <option value="all">全部周</option>
+            ) : (
+              <>
+                <option value="current">本周</option>
+                <option value="next">下周</option>
+                <option value="past">往周</option>
+              </>
+            )}
           </select>
           <select
             aria-label="状态筛选"
@@ -199,7 +206,11 @@ export function PoolPage({
                   >
                     {task.title}
                   </button>
-                  <span className="todo-priority">P{task.priority}</span>
+                  <span
+                    className={`todo-priority ${task.priority === 0 ? "is-p0" : ""}`}
+                  >
+                    P{task.priority}
+                  </span>
                   <span className={`tag ${task.category}`}>
                     {CATEGORY[task.category].short}
                   </span>
@@ -236,28 +247,20 @@ export function PoolPage({
                       </span>
                     )}
                     {task.status === "open" &&
-                      onOpenSplit &&
-                      (task.steps && task.steps.length > 0 ? (
+                      task.kind !== "cantonese" &&
+                      onOpenSplit && (
                         <button
                           className="text-button"
                           onClick={() => onOpenSplit(task)}
                         >
-                          调整拆解步骤
+                          {task.steps && task.steps.length > 0
+                            ? "调整拆解步骤"
+                            : shouldSuggestInterviewSplit(task, today)
+                              ? "逾期建议：拆成小步准备"
+                              : "拆解步骤"}
                           <ArrowRight size={14} />
                         </button>
-                      ) : (
-                        task.kind === "interview" && (
-                          <button
-                            className="text-button"
-                            onClick={() => onOpenSplit(task)}
-                          >
-                            {shouldSuggestInterviewSplit(task, today)
-                              ? "逾期建议：拆成小步准备"
-                              : "拆成小步准备"}
-                            <ArrowRight size={14} />
-                          </button>
-                        )
-                      ))}
+                      )}
                     <button
                       className="text-button"
                       onClick={() => onMenu(task)}

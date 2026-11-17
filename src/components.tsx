@@ -9,16 +9,21 @@ import {
   X,
 } from "lucide-react";
 import {
-  buildInterviewSteps,
   CATEGORY,
   dateObject,
-  inferContribution,
+  detectJobFormMode,
   interviewRewardInfo,
   KIND,
+  resolveTaskFormFields,
   taskReward,
   weekStart,
 } from "./domain.ts";
-import type { CalendarEvent, Category, InterviewStep, Task } from "./domain.ts";
+import type {
+  CalendarEvent,
+  Category,
+  JobFormMode,
+  Task,
+} from "./domain.ts";
 
 export const shortDate = (date: string) =>
   dateObject(date).toLocaleDateString("zh-CN", {
@@ -64,11 +69,12 @@ export function TaskCheck({
   onFinish: (task: Task) => void;
 }) {
   const done = task.status === "done";
+  const timerOnly = !done && task.kind === "cantonese";
   return (
     <button
       type="button"
-      className={`task-check ${done ? "checked" : ""}`}
-      aria-label={`${done ? "点击撤销完成" : "完成任务"}：${task.title}`}
+      className={`task-check ${done ? "checked" : ""} ${timerOnly ? "timer-only" : ""}`}
+      aria-label={`${done ? "点击撤销完成" : timerOnly ? "请使用计时器完成" : "完成任务"}：${task.title}`}
       onClick={() => onFinish(task)}
     >
       {done && <Check size={14} strokeWidth={2.8} />}
@@ -286,24 +292,14 @@ export function TaskForm({
   existing?: Task;
   today: string;
   defaultToday?: boolean;
-  commit: (task: Task, todaySelected: boolean, addToCalendar?: boolean) => void;
+  commit: (task: Task, todaySelected: boolean) => void;
   close?: () => void;
 }) {
   const [category, setCategory] = useState<Category>(
     existing?.category ?? "job",
   );
-  const initialJobForm = (): "other" | "video" | "interview" => {
-    if (!existing) return "other";
-    if (existing.steps && existing.steps.length > 0) {
-      if (existing.steps.some((s) => s.title.includes("视频"))) return "video";
-      return "interview";
-    }
-    if (existing.kind === "interview") return "interview";
-    return "other";
-  };
-  const [jobForm, setJobForm] = useState<"other" | "video" | "interview">(
-    initialJobForm,
-  );
+  const initialMode = detectJobFormMode(existing);
+  const [jobForm, setJobForm] = useState<JobFormMode>(initialMode);
 
   const submit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -318,36 +314,12 @@ export function TaskForm({
       return;
     }
 
-    let kind: Task["kind"];
-    let amount: number;
-    let steps: InterviewStep[] | undefined = existing?.steps;
-
-    if (category === "job") {
-      if (jobForm === "video") {
-        kind = "interview";
-        amount = 1;
-        if (!steps || steps.length === 0 || initialJobForm() !== "video") {
-          steps = buildInterviewSteps("video");
-        }
-      } else if (jobForm === "interview") {
-        kind = "interview";
-        amount = 1;
-        if (!steps || steps.length === 0 || initialJobForm() !== "interview") {
-          steps = buildInterviewSteps("interview");
-        }
-      } else {
-        const inf = inferContribution(title, "job");
-        kind = inf.kind;
-        amount = inf.amount;
-        if (initialJobForm() !== "other") {
-          steps = undefined;
-        }
-      }
-    } else {
-      const inf = inferContribution(title, category);
-      kind = inf.kind;
-      amount = inf.amount;
-    }
+    const { kind, amount, steps } = resolveTaskFormFields({
+      existing,
+      title,
+      category,
+      jobForm,
+    });
 
     commit(
       {
@@ -365,9 +337,14 @@ export function TaskForm({
         ...(steps ? { steps } : {}),
       },
       fields.get("today") === "on",
-      fields.get("calendar") === "on",
     );
   };
+
+  const hasCustomSteps =
+    Boolean(existing?.steps && existing.steps.length > 0) &&
+    (category !== "job" || jobForm === "other") &&
+    initialMode === "other";
+
   return (
     <form onSubmit={submit} className="form">
       <label>
@@ -423,10 +400,17 @@ export function TaskForm({
           </div>
           {jobForm !== "other" && (
             <p className="form-sub-hint">
-              已选「{jobForm === "video" ? "录视频" : "面试"}」形式，将立即生成 11 步细分子任务。
+              {existing && initialMode === jobForm && existing.steps?.length
+                ? `当前包含 ${existing.steps.length} 个准备小步，修改标题或截止日会保留现有进度。`
+                : `已选「${jobForm === "video" ? "录视频" : "面试"}」形式，将生成 11 步细分子任务。`}
             </p>
           )}
         </div>
+      )}
+      {hasCustomSteps && existing?.steps && (
+        <p className="form-sub-hint">
+          已包含 {existing.steps.length} 个拆解小步，保存修改会完整保留。
+        </p>
       )}
       <div className="form-row">
         <label>
@@ -454,12 +438,9 @@ export function TaskForm({
             <input name="today" type="checkbox" defaultChecked={defaultToday} />
             加入今日任务
           </label>
-          <label className="checkbox-label">
-            <input name="calendar" type="checkbox" />
-            加入日历
-          </label>
         </div>
       )}
+      <p className="form-note">设置截止日期后会自动在日历显示，修改截止日实时同步。</p>
       <button className="primary" type="submit">
         {existing ? "保存修改" : "添加任务"}
         <Plus size={18} />
@@ -491,13 +472,18 @@ export function EventForm({
           input.reportValidity();
           return;
         }
+        const rawTime = String(f.get("time") ?? "")
+          .trim()
+          .slice(0, 5);
+        const time = /^([01]\d|2[0-3]):[0-5]\d$/.test(rawTime) ? rawTime : "";
+        const note = String(f.get("note") ?? "").trim();
         commit({
           id: existing?.id ?? crypto.randomUUID(),
           title,
           date: String(f.get("date")),
-          time: existing?.time ?? "",
+          time,
           kind: String(f.get("kind")) as CalendarEvent["kind"],
-          note: existing?.note ?? "",
+          note,
         });
       }}
     >
@@ -507,22 +493,32 @@ export function EventForm({
           name="title"
           required
           maxLength={200}
-          placeholder="例如：公司面试 / 作业DDL"
+          placeholder="例如：公司面试 / 宣讲会提醒"
           defaultValue={existing?.title}
           onInput={(e) => e.currentTarget.setCustomValidity("")}
         />
       </label>
-      <label>
-        日期
-        <input
-          name="date"
-          type="date"
-          required
-          defaultValue={existing?.date ?? date}
-          min="1900-01-01"
-          max="2100-12-31"
-        />
-      </label>
+      <div className="form-row">
+        <label>
+          日期
+          <input
+            name="date"
+            type="date"
+            required
+            defaultValue={existing?.date ?? date}
+            min="1900-01-01"
+            max="2100-12-31"
+          />
+        </label>
+        <label>
+          时间（选填）
+          <input
+            name="time"
+            type="time"
+            defaultValue={existing?.time ?? ""}
+          />
+        </label>
+      </div>
       <label>
         事项类型
         <select name="kind" defaultValue={existing?.kind ?? "reminder"}>
@@ -530,6 +526,16 @@ export function EventForm({
           <option value="deadline">重要截止日期</option>
           <option value="reminder">提醒事项</option>
         </select>
+      </label>
+      <label>
+        备注（选填）
+        <textarea
+          name="note"
+          rows={2}
+          maxLength={1000}
+          placeholder="例如：会议链接、地点或需要携带的材料"
+          defaultValue={existing?.note ?? ""}
+        />
       </label>
       <p className="form-note">日历事项用于提醒，不自动计入任务或发放积分。</p>
       <button className="primary" type="submit">

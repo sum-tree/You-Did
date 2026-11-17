@@ -12,13 +12,18 @@ import {
   X,
 } from "lucide-react";
 import {
+  addDays,
   archiveTasks,
   balance,
   buildInterviewSteps,
   CATEGORY,
   chooseDaily,
   dailyTasks,
+  isGenerated,
   localDate,
+  MAX_INTERVIEW_STEPS,
+  moveTasks,
+  moveTasksToCurrentWeek,
   normalizeData,
   setInterviewSteps,
   uncompleteTask,
@@ -29,6 +34,7 @@ import type { AppData, CalendarEvent, InterviewStep, Task } from "./domain.ts";
 import type { Snapshot } from "./storage.ts";
 import type { Update } from "./useAppStore.ts";
 import {
+  categoryIcon,
   dateLabel,
   eventKind,
   longDate,
@@ -69,6 +75,10 @@ export function TaskMenuSheet({
   onSplit?: (task: Task, base: Snapshot) => void;
 }) {
   const inToday = dailyTasks(data, today).some((item) => item.id === task.id);
+  const currentWeek = weekStart(today);
+  const nextWeek = addDays(currentWeek, 7);
+  const canMoveWeek = !isGenerated(task);
+  const isPlannedFuture = task.plannedWeek >= nextWeek;
   return (
     <Modal {...sync} title={task.title} close={close}>
       <p className="form-note">
@@ -82,7 +92,7 @@ export function TaskMenuSheet({
               编辑任务 / 修改DDL
               <ArrowRight size={17} />
             </button>
-            {onSplit && (
+            {onSplit && task.kind !== "cantonese" && (
               <button onClick={() => onSplit(task, base)}>
                 {task.steps && task.steps.length > 0
                   ? "调整拆解步骤"
@@ -98,7 +108,7 @@ export function TaskMenuSheet({
                   task.plannedWeek > weekStart(date) &&
                   (!task.dueDate || task.dueDate > date)
                 ) {
-                  notify("这是下周的任务，调整计划周后再加入今日。");
+                  notify("这是下周的任务，先移回本周后再加入今日。");
                   return;
                 }
                 const result = await update(
@@ -119,6 +129,30 @@ export function TaskMenuSheet({
               {inToday ? "从今日移出" : "加入今日"}
               <ArrowRight size={17} />
             </button>
+            {canMoveWeek && (
+              <button
+                onClick={async () => {
+                  const date = localDate();
+                  const result = await update(
+                    (previous) =>
+                      isPlannedFuture
+                        ? moveTasksToCurrentWeek(previous, [task.id], date)
+                        : moveTasks(previous, [task.id], date),
+                    base,
+                  );
+                  if (!result) return;
+                  close();
+                  notify(
+                    isPlannedFuture
+                      ? "已移回本周待办。"
+                      : "已移至下周待办。",
+                  );
+                }}
+              >
+                {isPlannedFuture ? "移至本周" : "移至下周"}
+                <span>{isPlannedFuture ? "纳入本周安排" : "推迟至下周一"}</span>
+              </button>
+            )}
             <button
               onClick={async () => {
                 const result = await update(
@@ -302,21 +336,47 @@ export function DaySheet({
   close,
   date,
   events,
+  tasks,
   base,
   onEdit,
+  onAddEvent,
+  onOpenTask,
   rebase,
 }: SheetProps & {
   date: string;
   events: CalendarEvent[];
+  tasks: Task[];
   base: Snapshot;
   onEdit: (event: CalendarEvent, base: Snapshot) => void;
+  onAddEvent: () => void;
+  onOpenTask: (task: Task, base: Snapshot) => void;
   rebase: (snapshot: Snapshot) => void;
 }) {
+  const dayTasks = tasks
+    .filter((task) => task.status !== "archived" && task.dueDate === date)
+    .sort(
+      (a, b) =>
+        (a.status === "open" ? 0 : 1) - (b.status === "open" ? 0 : 1) ||
+        a.priority - b.priority ||
+        a.createdAt.localeCompare(b.createdAt),
+    );
+  const taskTitles = new Set(dayTasks.map((t) => t.title.trim()));
   const dayEvents = events
-    .filter((event) => event.date === date)
-    .sort((a, b) => a.time.localeCompare(b.time));
+    .filter(
+      (event) =>
+        event.date === date &&
+        !(
+          !event.time &&
+          !event.note &&
+          taskTitles.has(event.title.trim())
+        ),
+    )
+    .sort((a, b) =>
+      (a.time || "99:99").localeCompare(b.time || "99:99") ||
+      a.id.localeCompare(b.id),
+    );
 
-  const hasContent = dayEvents.length > 0;
+  const hasContent = dayEvents.length > 0 || dayTasks.length > 0;
 
   return (
     <Modal {...sync} title={longDate(date, true)} close={close}>
@@ -335,7 +395,8 @@ export function DaySheet({
               </span>
               <span>
                 <small>
-                  {event.time ? `${event.time} · ` : ""}{eventKind(event.kind)}
+                  {event.time ? `${event.time} · ` : ""}
+                  {eventKind(event.kind)}
                 </small>
                 <strong>{event.title}</strong>
                 {event.note && <p>{event.note}</p>}
@@ -373,10 +434,48 @@ export function DaySheet({
               </span>
             </article>
           ))}
+          {dayTasks.map((task) => {
+            const done = task.status === "done";
+            return (
+              <article
+                className={`event-card task-ddl-card ${task.kind === "interview" ? "interview" : "deadline"} ${done ? "is-done" : ""}`}
+                key={`task-${task.id}`}
+              >
+                <span className={`event-icon ${task.category}`}>
+                  {categoryIcon(task.category, 18)}
+                </span>
+                <span>
+                  <small>
+                    {CATEGORY[task.category].name} · 任务截止
+                    {done ? " · 已完成" : ""}
+                  </small>
+                  <strong>{task.title}</strong>
+                  <span className="event-actions">
+                    <button
+                      className="text-button"
+                      aria-label={`查看任务操作：${task.title}`}
+                      onClick={() => onOpenTask(task, base)}
+                    >
+                      {done ? "查看详情" : "调整 / 操作任务"}
+                      <ArrowRight size={13} />
+                    </button>
+                  </span>
+                </span>
+              </article>
+            );
+          })}
         </div>
       ) : (
-        <p className="empty-line">这一天没有事项。</p>
+        <p className="empty-line">这一天暂无提醒或截止任务。</p>
       )}
+      <button
+        type="button"
+        className="outline-button full day-sheet-add"
+        onClick={onAddEvent}
+      >
+        <Plus size={16} />
+        添加当天事项
+      </button>
     </Modal>
   );
 }
@@ -402,11 +501,18 @@ export function SettingsSheet({
   discardPending: () => void;
   snapshot: { current: Snapshot };
 }) {
+  const [confirmDiscard, setConfirmDiscard] = useState(false);
+  const [stagedImport, setStagedImport] = useState<{
+    value: AppData;
+    fileName: string;
+    base: Snapshot;
+  } | null>(null);
+
   return (
     <Modal {...sync} title="设置" close={close}>
       <div className="settings-section">
         <h3>学期进度</h3>
-        <p>共13周课程 + 2周考试；按实际教学周调整。</p>
+        <p>共13周课程 + 2周考试；按实际教学周自动推进，也可手动微调。</p>
         <label className="course-setting">
           当前第
           <select
@@ -432,23 +538,46 @@ export function SettingsSheet({
       <div className="settings-section">
         <h3>保存你的每一步</h3>
         <p>
-          记录只存在当前浏览器中。换设备、换网址或清理浏览器前，先导出备份。
+          记录保存在当前浏览器本地。换设备、换网址或清理浏览器缓存前，请先导出备份。
         </p>
         <p>
-          多个页面同时编辑时，过期的改动会停止保存。待保存备份仅保留在当前页面，关闭或刷新前请先导出；它包含本次尝试的记录，不会自动合并到最新记录。
+          多标签页同时编辑时，过期改动会暂停覆盖并保留为「待保存备份」，关闭或刷新前可导出保存。
         </p>
-        {hasPending && (
-          <button
-            className="text-button full"
-            onClick={() => {
-              if (window.confirm("丢弃待保存备份？已保存的记录不受影响。"))
-                discardPending();
-            }}
-          >
-            丢弃待保存备份
-          </button>
-        )}
+        {hasPending &&
+          (!confirmDiscard ? (
+            <button
+              type="button"
+              className="text-button full"
+              onClick={() => setConfirmDiscard(true)}
+            >
+              丢弃待保存备份
+            </button>
+          ) : (
+            <div className="inline-confirm" role="alert">
+              <p>确定丢弃待保存备份吗？当前已保存的正式记录不受影响。</p>
+              <div className="inline-confirm-actions">
+                <button
+                  type="button"
+                  className="outline-button"
+                  onClick={() => setConfirmDiscard(false)}
+                >
+                  取消
+                </button>
+                <button
+                  type="button"
+                  className="confirm-danger-btn"
+                  onClick={() => {
+                    setConfirmDiscard(false);
+                    discardPending();
+                  }}
+                >
+                  确认丢弃
+                </button>
+              </div>
+            </div>
+          ))}
         <button
+          type="button"
           className="outline-button full"
           onClick={() =>
             void shareOrDownload(
@@ -462,6 +591,7 @@ export function SettingsSheet({
         </button>
         {blocked && rawRecovery && (
           <button
+            type="button"
             className="outline-button full"
             onClick={() =>
               void shareOrDownload(
@@ -489,42 +619,68 @@ export function SettingsSheet({
                 if (file.size > 10 * 1024 * 1024) throw new Error("too large");
                 const value = upgradeData(JSON.parse(await file.text()));
                 if (!value) throw new Error("invalid");
-                if (
-                  window.confirm(
-                    "导入会替换当前记录。请先导出当前备份，确定导入吗？",
-                  )
-                ) {
-                  const result = await update(
-                    () => normalizeData(value),
-                    base,
-                    true,
-                  );
-                  if (!result) return;
-                  notify("备份已恢复，继续积累你的小小进步。");
-                }
+                setStagedImport({
+                  value,
+                  fileName: file.name,
+                  base,
+                });
               } catch {
+                setStagedImport(null);
                 notify("备份格式无效或文件过大，当前记录保持不变。");
               }
             }}
           />
         </label>
+        {stagedImport && (
+          <div className="inline-confirm" role="alert">
+            <p>
+              已读取「{stagedImport.fileName}」，导入后将替换当前浏览器中的记录。建议先点击上方「导出备份」留存当前进度。
+            </p>
+            <div className="inline-confirm-actions">
+              <button
+                type="button"
+                className="outline-button"
+                onClick={() => setStagedImport(null)}
+              >
+                取消
+              </button>
+              <button
+                type="button"
+                className="confirm-primary-btn"
+                onClick={async () => {
+                  const currentStaged = stagedImport;
+                  setStagedImport(null);
+                  const result = await update(
+                    () => normalizeData(currentStaged.value),
+                    currentStaged.base,
+                    true,
+                  );
+                  if (!result) return;
+                  notify("备份已恢复，继续积累你的小小进步。");
+                }}
+              >
+                确认导入替换
+              </button>
+            </div>
+          </div>
+        )}
       </div>
       <div className="settings-section">
-        <h3>奖励规则</h3>
+        <h3>奖励与排期规则</h3>
         <p>
-          完成任务：普通任务 +2，简历投递 +4，测试/笔试 +8，粤语练习 +2，英语面试题 +4，听力 +2，课程作业 +1。面试按添加后第几天完成：0–3天 +12，4–6天 +4，7–10天 +2，更晚 +1，与截止日期无关。
+          完成任务：普通任务 +2，简历投递 +4，测试/笔试 +8，英语面试题 +4，听力 +2，课程作业 +1；粤语口语通过计时器结算（满15分钟 +1，满30分钟 +2）。面试按添加后第几天完成：0–3天 +12，4–6天 +4，7–10天 +2，更晚 +1，与截止日期无关。
         </p>
         <p>
           每周目标：香港揾工 +10，超出15份后每3份 +4；大胆说口语 +7，听力每10分钟 +2。基础目标完成后自动补领挑战奖励，未满一档不发分，也不跨周累计。
         </p>
         <p>
-          香港揾工：本周投递15份简历，且本周安排的测试/笔试和面试全部完成。没有测试或面试安排时进度只看简历；有安排时简历与测试/面试各占一半。临时新增面试会让进度下降，但已发奖励不收回。提前完成的面试计入原计划周。大胆说口语：粤语4份 + 英语2份即为100%，每份等值；粤语满30分钟算1份、15–29分钟算半份，英语每完成1条练习算1份，超出部分暂不计入。
+          目标进度：香港揾工需本周投递15份简历且完成本周计划的测试/笔试与面试（无面试安排时仅看简历；提前完成的面试计入原计划周）。大胆说口语为粤语4份 + 英语2份即达100%（粤语满30分钟计1份、15–29分钟计半份；英语每完成1条计1份）。
         </p>
         <p>
-          每周自动在待办生成：香港秋招简历x5（3条）、英语面试练习3题（3条）、粤语30分钟（2条）。自动安排时，每日先放一条简历，再放普通任务，列表不到3条时加一条英语（英语做完后才轮到粤语）；同一系列每天只安排一条，英语和粤语不同天出现。手动安排时不套用这些规则。新的一周开始时，上周未完成的自动任务移入「已清空」，可恢复。
+          每周自动生成：香港秋招简历x5（3条）、粤语30分钟（7条）、英语面试练习3题（3条）。自动安排时，每日默认预留1条粤语与1条简历，穿插逾期或高优普通任务；本周完成2次粤语后，若当日列表未满3项会自动加入1条英语。新的一周开始时，上周未完成的自动任务自动清理，不会堆积到「已清空」。
         </p>
         <p>
-          清空任务不扣积分。完成记录保留，奖励只发一次。误点完成时，可在当天从任务菜单「撤销完成」，会收回这次完成带来的卡拉米；隔天后不能撤销。
+          日历联动与撤销：所有带截止日期的任务自动同步显示在日历中。清空、编辑或跨周移动任务均不扣回已得卡拉米；当天误点完成可在任务菜单或勾选框「撤销完成」，隔天后不可撤销。
         </p>
       </div>
       <div className="settings-foot">
@@ -597,6 +753,10 @@ export function InterviewSplitSheet({
   };
 
   const handleAdd = () => {
+    if (steps.length >= MAX_INTERVIEW_STEPS) {
+      notify(`单个任务最多支持拆分为 ${MAX_INTERVIEW_STEPS} 个小步哦～`);
+      return;
+    }
     const trimmed = newTitle.trim();
     if (!trimmed) {
       notify("请先输入小步内容再添加");
@@ -623,7 +783,7 @@ export function InterviewSplitSheet({
       close={close}
     >
       <p className="form-note">
-        可选用标准模板（面试或录视频），或自由编辑、拖动与新增自定义小步。各小步不计单独卡拉米，全部完成后自动完成原任务并结算奖励。
+        可选用标准模板（面试或录视频），或自由编辑、拖动与新增自定义小步（最多 {MAX_INTERVIEW_STEPS} 步）。全部完成后自动结算原任务奖励。
       </p>
       <div className="split-form">
         <div className="split-template-group">
@@ -654,12 +814,11 @@ export function InterviewSplitSheet({
         </div>
 
         <div className="steps-editor-list">
-          <h4>步骤清单（可编辑、拖动排序或删除）：</h4>
+          <h4>
+            步骤清单（{steps.length}/{MAX_INTERVIEW_STEPS}，可编辑、拖动排序或删除）：
+          </h4>
           {steps.length === 0 ? (
-            <p
-              className="form-note"
-              style={{ textAlign: "center", padding: "12px 0" }}
-            >
+            <p className="form-note steps-empty-hint">
               暂无步骤，可在下方输入小步并点击添加，或选用上方预设模板
             </p>
           ) : (
@@ -667,7 +826,7 @@ export function InterviewSplitSheet({
               <div
                 key={step.id}
                 data-step-index={idx}
-                className={`step-card-row ${dragIndex === idx ? "is-dragging" : ""}`}
+                className={`step-card-row ${dragIndex === idx ? "is-dragging" : ""} ${step.done ? "is-done-step" : ""}`}
                 draggable
                 onDragStart={(e) => {
                   e.dataTransfer.effectAllowed = "move";
@@ -687,6 +846,11 @@ export function InterviewSplitSheet({
                 onDragEnd={() => setDragIndex(null)}
               >
                 <div className="step-input-card">
+                  {step.done && (
+                    <span className="step-done-pill" title="该步已完成">
+                      ✓
+                    </span>
+                  )}
                   <input
                     type="text"
                     value={step.title}
@@ -748,7 +912,12 @@ export function InterviewSplitSheet({
             <input
               ref={addInputRef}
               type="text"
-              placeholder="新增自定义小步..."
+              placeholder={
+                steps.length >= MAX_INTERVIEW_STEPS
+                  ? `已达 ${MAX_INTERVIEW_STEPS} 步上限`
+                  : "新增自定义小步..."
+              }
+              disabled={steps.length >= MAX_INTERVIEW_STEPS}
               value={newTitle}
               maxLength={200}
               onChange={(e) => setNewTitle(e.target.value)}
@@ -762,6 +931,7 @@ export function InterviewSplitSheet({
             <button
               type="button"
               className="add-step-btn"
+              disabled={steps.length >= MAX_INTERVIEW_STEPS}
               onClick={handleAdd}
             >
               <Plus size={16} />
@@ -789,13 +959,23 @@ export function InterviewSplitSheet({
             notify("请先添加至少一个拆解步骤。");
             return;
           }
+          const date = localDate();
           const result = await update(
-            (previous) => setInterviewSteps(previous, task.id, validSteps),
+            (previous) =>
+              setInterviewSteps(previous, task.id, validSteps, date),
             base,
           );
           if (!result) return;
           close();
-          notify("已拆分成小步，每走一步都离目标更近。");
+          const earned =
+            balance(result.snapshot.data) - balance(base.data);
+          if (earned > 0) {
+            notify(
+              `剩余步骤均已完成，+${earned} 卡拉米 · 每一步都算数`,
+            );
+          } else {
+            notify("已拆分成小步，每走一步都离目标更近。");
+          }
         }}
       >
         <Check size={18} />

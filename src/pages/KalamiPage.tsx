@@ -341,15 +341,15 @@ export function KalamiPage({
   const currentMonth = today.slice(0, 7);
   const currentYear = Number(today.slice(0, 4));
 
-  const startMonth = useMemo(() => getStartMonth(data), [data]);
+  const startMonth = useMemo(() => getStartMonth(data, today), [data, today]);
   const startYear = Number(startMonth.slice(0, 4));
 
   const [browsingYear, setBrowsingYear] = useState(() => currentYear);
   const [selectedMonth, setSelectedMonth] = useState(() => currentMonth);
 
   const monthsStats = useMemo(
-    () => visibleYearlyMonthsStats(data, browsingYear),
-    [data, browsingYear],
+    () => visibleYearlyMonthsStats(data, browsingYear, today),
+    [data, browsingYear, today],
   );
 
   useEffect(() => {
@@ -368,9 +368,10 @@ export function KalamiPage({
 
   const total = monthBalance(data, selectedMonth);
   const totalBalance = balance(data);
-  const fullJars = total > 0 ? Math.floor((total - 1) / JAR_SIZE) : 0;
-  const inJar = total - fullJars * JAR_SIZE;
-  const jarStart = fullJars * JAR_SIZE;
+  const jarIndex = total > 0 ? Math.floor((total - 1) / JAR_SIZE) : 0;
+  const jarStart = jarIndex * JAR_SIZE;
+  const inJar = total - jarStart;
+  const fullJars = Math.floor(total / JAR_SIZE);
 
   // Determine newly earned kalami since last viewed (only for current month)
   const [dropFrom, setDropFrom] = useState(() => {
@@ -400,15 +401,32 @@ export function KalamiPage({
   newStartIndexRef.current = newStartIndex;
   totalRef.current = total;
 
+  const timersRef = useRef<number[]>([]);
+  const scheduleTimer = (fn: () => void, ms: number) => {
+    const id = window.setTimeout(fn, ms);
+    timersRef.current.push(id);
+    return id;
+  };
+  useEffect(() => {
+    return () => {
+      for (const id of timersRef.current) clearTimeout(id);
+      timersRef.current = [];
+    };
+  }, []);
+
+  const prefersReducedMotion = () =>
+    typeof window !== "undefined" &&
+    Boolean(window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches);
+
   const closeCorkCeremony = () => {
     if (corkHandledRef.current) return;
     corkHandledRef.current = true;
     setCorkState("closing");
-    setTimeout(() => {
+    scheduleTimer(() => {
       setCorkState("closed");
       setJarThump(true);
       playCorkThump();
-      setTimeout(() => setJarThump(false), 350);
+      scheduleTimer(() => setJarThump(false), 350);
       writeSeen(currentMonth, totalRef.current);
       setDropFrom(totalRef.current);
     }, 650);
@@ -696,9 +714,11 @@ export function KalamiPage({
     const balls: BallPhysics[] = [];
     const now = Date.now();
 
+    const reducedMotion = prefersReducedMotion();
+
     for (let i = 0; i < inJar; i++) {
       const initial = restingSlot(i);
-      const isNew = hasNew && i >= newStartIndex;
+      const isNew = hasNew && !reducedMotion && i >= newStartIndex;
 
       if (!isNew) {
         // Reuse existing physical coordinates if same month and already simulated; otherwise use restingSlot
@@ -770,7 +790,7 @@ export function KalamiPage({
       }
     });
 
-    if (hasNew) {
+    if (hasNew && !reducedMotion) {
       corkHandledRef.current = false;
       const newCount = Math.max(1, inJar - newStartIndex);
       // Deadline: 1200ms initial pop + stagger entry delay + 2200ms settling
@@ -805,6 +825,9 @@ export function KalamiPage({
       isSimulatingRef.current = false;
       if (!isBrowsingHistory) {
         writeSeen(currentMonth, total);
+        if (hasNew && reducedMotion) {
+          setDropFrom(total);
+        }
       }
     }
 
@@ -867,7 +890,7 @@ export function KalamiPage({
 
   // Mobile Device Orientation (Gyro tilt response) & Motion Shake
   useEffect(() => {
-    if (gyroPermState === "denied") return;
+    if (gyroPermState === "denied" || prefersReducedMotion()) return;
 
     let lastGamma = 0;
     const handleOrientation = (e: DeviceOrientationEvent) => {
@@ -931,10 +954,11 @@ export function KalamiPage({
 
   // Tap / Click Interaction: Jumble & bounce the jellies
   const handleJarTap = () => {
-    if (jarWobble || hasNew || corkState !== "closed") return;
+    if (jarWobble || hasNew || corkState !== "closed" || prefersReducedMotion())
+      return;
     playJarBounce(inJar);
     setJarWobble(true);
-    setTimeout(() => setJarWobble(false), 650);
+    scheduleTimer(() => setJarWobble(false), 650);
 
     // Natural shockwave bounce: bottom balls receive direct impulse, transmitting smoothly up
     ballsRef.current.forEach((b) => {
@@ -950,9 +974,9 @@ export function KalamiPage({
     // Cork gives a playful pop & snaps back
     if (corkState === "closed") {
       setCorkState("popped");
-      setTimeout(() => {
+      scheduleTimer(() => {
         setCorkState("closing");
-        setTimeout(() => {
+        scheduleTimer(() => {
           setCorkState("closed");
           playCorkThump();
         }, 500);
@@ -1132,7 +1156,7 @@ export function KalamiPage({
                 }}
                 transform={`translate(${initial.x.toFixed(1)} ${initial.y.toFixed(1)}) rotate(${initial.turn.toFixed(1)})`}
                 style={{
-                  opacity: hasNew && i >= newStartIndex ? 0 : 1,
+                  opacity: hasNew && !prefersReducedMotion() && i >= newStartIndex ? 0 : 1,
                   willChange: "transform",
                 }}
               >

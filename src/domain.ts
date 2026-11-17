@@ -259,7 +259,7 @@ export function yearlyMonthsStats(data: AppData, year: number): MonthStat[] {
   });
 }
 
-export function getStartMonth(data: AppData): string {
+export function getStartMonth(data: AppData, today = localDate()): string {
   let earliest: string | null = null;
   const consider = (dateStr?: string) => {
     if (!dateStr) return;
@@ -273,11 +273,15 @@ export function getStartMonth(data: AppData): string {
   for (const r of data.rewards) consider(r.date);
   for (const c of data.completions) consider(c.date);
   for (const t of data.tasks) consider(t.createdAt);
-  return earliest ?? "2026-10";
+  return earliest ?? today.slice(0, 7);
 }
 
-export function visibleYearlyMonthsStats(data: AppData, year: number): MonthStat[] {
-  const startMonth = getStartMonth(data);
+export function visibleYearlyMonthsStats(
+  data: AppData,
+  year: number,
+  today = localDate(),
+): MonthStat[] {
+  const startMonth = getStartMonth(data, today);
   const startYear = Number(startMonth.slice(0, 4));
   const startMonthNum = Number(startMonth.slice(5, 7));
   const allMonths = yearlyMonthsStats(data, year);
@@ -692,21 +696,149 @@ export function shouldSuggestInterviewSplit(task: Task, today: string): boolean 
   );
   return overdueDays >= 3;
 }
+export const MAX_INTERVIEW_STEPS = 20;
+
+export type JobFormMode = "other" | "video" | "interview";
+
+export function detectJobFormMode(existing?: Task): JobFormMode {
+  if (!existing || existing.category !== "job" || existing.kind !== "interview") {
+    return "other";
+  }
+  if (existing.steps && existing.steps.length > 0) {
+    if (existing.steps.some((s) => s.title.includes("视频"))) return "video";
+    return "interview";
+  }
+  return "other";
+}
+
+export function resolveTaskFormFields(params: {
+  existing?: Task;
+  title: string;
+  category: Category;
+  jobForm: JobFormMode;
+}): { kind: Contribution; amount: number; steps?: InterviewStep[] } {
+  const { existing, category, jobForm } = params;
+  const title = params.title.trim();
+  const initialMode = detectJobFormMode(existing);
+  const sameCategory = existing?.category === category;
+  const sameTitle = existing ? existing.title.trim() === title : false;
+
+  if (category === "job") {
+    if (jobForm === "video") {
+      const keepExistingSteps =
+        existing &&
+        sameCategory &&
+        initialMode === "video" &&
+        existing.steps &&
+        existing.steps.length > 0;
+      return {
+        kind: "interview",
+        amount: 1,
+        steps: keepExistingSteps ? existing.steps : buildInterviewSteps("video"),
+      };
+    }
+    if (jobForm === "interview") {
+      const keepExistingSteps =
+        existing &&
+        sameCategory &&
+        initialMode === "interview" &&
+        existing.steps &&
+        existing.steps.length > 0;
+      return {
+        kind: "interview",
+        amount: 1,
+        steps: keepExistingSteps
+          ? existing.steps
+          : buildInterviewSteps("interview"),
+      };
+    }
+    // jobForm === "other"
+    const switchedFromTemplate = existing && sameCategory && initialMode !== "other";
+    const preservedSteps =
+      !switchedFromTemplate && sameCategory && existing?.steps?.length
+        ? existing.steps
+        : undefined;
+    if (existing && sameCategory && !switchedFromTemplate && sameTitle) {
+      return {
+        kind: existing.kind,
+        amount: existing.amount,
+        ...(preservedSteps ? { steps: preservedSteps } : {}),
+      };
+    }
+    const inf = inferContribution(title, "job");
+    return {
+      kind: inf.kind,
+      amount: inf.amount,
+      ...(preservedSteps && inf.kind !== "cantonese"
+        ? { steps: preservedSteps }
+        : {}),
+    };
+  }
+
+  // Non-job categories ("speech" | "course")
+  const preservedSteps =
+    existing && sameCategory && existing.steps?.length
+      ? existing.steps
+      : undefined;
+  if (existing && sameCategory && sameTitle) {
+    return {
+      kind: existing.kind,
+      amount: existing.amount,
+      ...(preservedSteps && existing.kind !== "cantonese"
+        ? { steps: preservedSteps }
+        : {}),
+    };
+  }
+  const inf = inferContribution(title, category);
+  return {
+    kind: inf.kind,
+    amount: inf.amount,
+    ...(preservedSteps && inf.kind !== "cantonese"
+      ? { steps: preservedSteps }
+      : {}),
+  };
+}
+
 export function setInterviewSteps(
   data: AppData,
   taskId: string,
   steps: InterviewStep[],
+  date?: string,
 ): AppData {
   const task = data.tasks.find((item) => item.id === taskId);
-  if (!task || task.status !== "open") return data;
-  return {
+  if (!task || task.status !== "open" || task.kind === "cantonese") return data;
+  const cleaned = steps
+    .map((s) => ({ ...s, title: s.title.trim() }))
+    .filter((s) => s.title.length > 0)
+    .slice(0, MAX_INTERVIEW_STEPS);
+  if (cleaned.length === 0) {
+    return {
+      ...data,
+      tasks: data.tasks.map((item) =>
+        item.id === taskId ? { ...item, steps: undefined } : item,
+      ),
+    };
+  }
+  const doneCount = cleaned.filter((s) => s.done).length;
+  const allDone = doneCount === cleaned.length;
+  // Normalize completed flags as a contiguous prefix so sequential checking never deadlocks.
+  // If all remaining steps are already done and `date` is supplied, complete and settle the task;
+  // without `date`, leave the final step unchecked so an open task never sits at 100% done.
+  const effectiveDoneCount = allDone && !date ? cleaned.length - 1 : doneCount;
+  const aligned = cleaned.map((s, idx) => ({
+    ...s,
+    done: idx < effectiveDoneCount,
+  }));
+  const nextData: AppData = {
     ...data,
     tasks: data.tasks.map((item) =>
-      item.id === taskId
-        ? { ...item, steps: steps.length > 0 ? steps : undefined }
-        : item,
+      item.id === taskId ? { ...item, steps: aligned } : item,
     ),
   };
+  if (allDone && date) {
+    return completeTask(nextData, taskId, date);
+  }
+  return nextData;
 }
 export function toggleInterviewStep(
   data: AppData,
@@ -796,6 +928,103 @@ export function moveTasks(data: AppData, ids: string[], date: string): AppData {
     week,
     date,
   );
+}
+export function moveTasksToCurrentWeek(
+  data: AppData,
+  ids: string[],
+  date: string,
+): AppData {
+  const week = weekStart(date);
+  const moved = new Set(
+    data.tasks
+      .filter(
+        (task) =>
+          ids.includes(task.id) &&
+          !isGenerated(task) &&
+          task.status === "open" &&
+          task.plannedWeek > week,
+      )
+      .map((task) => task.id),
+  );
+  if (moved.size === 0) return data;
+  return {
+    ...data,
+    tasks: data.tasks.map((task) =>
+      moved.has(task.id) ? { ...task, plannedWeek: week } : task,
+    ),
+  };
+}
+
+export interface CalendarCellItem {
+  id: string;
+  title: string;
+  kind: string;
+  done?: boolean;
+  time?: string;
+  source: "event" | "task";
+}
+
+export function calendarItemsByDate(
+  events: CalendarEvent[],
+  tasks: Task[],
+): Map<string, CalendarCellItem[]> {
+  const map = new Map<string, CalendarCellItem[]>();
+  const taskKeysOnDate = new Set<string>();
+
+  const activeTasksWithDue = tasks
+    .filter((t) => t.status !== "archived" && Boolean(t.dueDate))
+    .sort(
+      (a, b) =>
+        (a.status === "open" ? 0 : 1) - (b.status === "open" ? 0 : 1) ||
+        a.priority - b.priority ||
+        a.createdAt.localeCompare(b.createdAt),
+    );
+
+  for (const task of activeTasksWithDue) {
+    taskKeysOnDate.add(`${task.dueDate}::${task.title.trim()}`);
+  }
+
+  const sortedEvents = [...events]
+    .filter((e) => Boolean(e.date))
+    .sort((a, b) =>
+      (a.time || "99:99").localeCompare(b.time || "99:99") ||
+      a.id.localeCompare(b.id),
+    );
+
+  for (const event of sortedEvents) {
+    const trimmed = event.title.trim();
+    // Skip legacy auto-duplicated blank calendar event when the live task DDL is on the same date
+    if (
+      !event.time &&
+      !event.note &&
+      taskKeysOnDate.has(`${event.date}::${trimmed}`)
+    ) {
+      continue;
+    }
+    const list = map.get(event.date) ?? [];
+    list.push({
+      id: `ev-${event.id}`,
+      title: trimmed,
+      kind: event.kind,
+      time: event.time,
+      source: "event",
+    });
+    map.set(event.date, list);
+  }
+
+  for (const task of activeTasksWithDue) {
+    const list = map.get(task.dueDate) ?? [];
+    list.push({
+      id: `task-${task.id}`,
+      title: task.title.trim(),
+      kind: task.kind === "interview" ? "interview" : task.category,
+      done: task.status === "done",
+      source: "task",
+    });
+    map.set(task.dueDate, list);
+  }
+
+  return map;
 }
 function speechRank(a: Task, b: Task): number {
   if (a.kind === "cantonese" && b.kind === "english") return -1;

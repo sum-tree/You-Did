@@ -1,11 +1,18 @@
 import { useMemo } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
-import { addDays, dateObject, localDate, weekStart } from "../domain.ts";
-import type { CalendarEvent } from "../domain.ts";
+import {
+  addDays,
+  calendarItemsByDate,
+  dateObject,
+  localDate,
+  weekStart,
+} from "../domain.ts";
+import type { CalendarEvent, Task } from "../domain.ts";
 import { longDate } from "../components.tsx";
 
 export function CalendarPage({
   events,
+  tasks = [],
   today,
   month,
   setMonth,
@@ -14,6 +21,7 @@ export function CalendarPage({
   openDay,
 }: {
   events: CalendarEvent[];
+  tasks?: Task[];
   today: string;
   month: string;
   setMonth: (month: string) => void;
@@ -28,42 +36,11 @@ export function CalendarPage({
     setMonth(localDate(d));
   };
 
-  // Group items (calendar events) by date for calendar display
-  const itemsByDate = useMemo(() => {
-    const map = new Map<
-      string,
-      { id: string; title: string; kind: string; done?: boolean }[]
-    >();
-
-    const pushItem = (
-      date: string,
-      item: { id: string; title: string; kind: string; done?: boolean },
-    ) => {
-      if (!date) return;
-      const list = map.get(date) ?? [];
-      const idx = list.findIndex((existing) => existing.title === item.title);
-      if (idx >= 0) {
-        if (item.done && !list[idx].done) {
-          list[idx].done = true;
-        }
-      } else {
-        list.push(item);
-        map.set(date, list);
-      }
-    };
-
-    // Calendar events (added in calendar page or from tasks with "add to calendar" checked)
-    for (const event of events) {
-      if (!event.date) continue;
-      pushItem(event.date, {
-        id: `ev-${event.id}`,
-        title: event.title.trim(),
-        kind: event.kind,
-      });
-    }
-
-    return map;
-  }, [events]);
+  // Dynamically project manual calendar events and task DDLs onto calendar days
+  const itemsByDate = useMemo(
+    () => calendarItemsByDate(events, tasks),
+    [events, tasks],
+  );
 
   return (
     <section className="calendar-card">

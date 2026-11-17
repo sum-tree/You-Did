@@ -42,6 +42,11 @@ import {
   yearlyMonthsStats,
   getStartMonth,
   visibleYearlyMonthsStats,
+  calendarItemsByDate,
+  detectJobFormMode,
+  MAX_INTERVIEW_STEPS,
+  moveTasksToCurrentWeek,
+  resolveTaskFormFields,
 } from "../src/domain.ts";
 
 const day = "2026-10-12";
@@ -1545,3 +1550,275 @@ test("cantoneseStreak counts consecutive days of Cantonese completions", () => {
     checkedInToday: false,
   });
 });
+
+test("getStartMonth and visibleYearlyMonthsStats fall back to today instead of hardcoded 2026-10 on empty data", () => {
+  const empty = emptyData();
+  assert.equal(getStartMonth(empty, "2027-03-18"), "2027-03");
+  const visible2027 = visibleYearlyMonthsStats(empty, 2027, "2027-03-18");
+  assert.equal(visible2027.length, 10);
+  assert.equal(visible2027[0].month, "2027-03");
+  assert.equal(visible2027[9].month, "2027-12");
+  assert.equal(visibleYearlyMonthsStats(empty, 2026, "2027-03-18").length, 0);
+});
+
+test("detectJobFormMode and resolveTaskFormFields preserve custom steps and kind when editing tasks", () => {
+  // 1. Ordinary job task (resume) with custom split steps keeps its kind, amount, and steps on edit
+  const customSteps = [
+    { id: "s1", title: "筛选岗位", done: true },
+    { id: "s2", title: "微调简历并投递", done: false },
+  ];
+  const resumeWithSteps = task("res1", "resume", 5, {
+    title: "香港秋招简历x5",
+    category: "job",
+    steps: customSteps,
+  });
+  assert.equal(detectJobFormMode(resumeWithSteps), "other");
+  const editedSameTitle = resolveTaskFormFields({
+    existing: resumeWithSteps,
+    title: "香港秋招简历x5",
+    category: "job",
+    jobForm: "other",
+  });
+  assert.equal(editedSameTitle.kind, "resume");
+  assert.equal(editedSameTitle.amount, 5);
+  assert.deepEqual(editedSameTitle.steps, customSteps);
+
+  // 2. Course task with custom steps keeps steps when DDL/priority or title is edited
+  const courseWithSteps = task("c1", "course", 1, {
+    title: "CS5187 Project",
+    category: "course",
+    steps: customSteps,
+  });
+  const editedCourse = resolveTaskFormFields({
+    existing: courseWithSteps,
+    title: "CS5187 Final Project",
+    category: "course",
+    jobForm: "other",
+  });
+  assert.equal(editedCourse.kind, "course");
+  assert.deepEqual(editedCourse.steps, customSteps);
+
+  // 3. Interview task whose steps were cleared stays step-less unless user selects a template
+  const plainInterview = task("iv1", "interview", 1, {
+    title: "HSBC 一面",
+    category: "job",
+  });
+  assert.equal(detectJobFormMode(plainInterview), "other");
+  const editedPlainInterview = resolveTaskFormFields({
+    existing: plainInterview,
+    title: "HSBC 一面",
+    category: "job",
+    jobForm: "other",
+  });
+  assert.equal(editedPlainInterview.kind, "interview");
+  assert.equal(editedPlainInterview.steps, undefined);
+
+  // 4. Switching an existing template interview back to "other" clears template steps
+  const templatedInterview = task("iv2", "interview", 1, {
+    title: "投行岗位准备",
+    category: "job",
+    steps: buildInterviewSteps("interview"),
+  });
+  assert.equal(detectJobFormMode(templatedInterview), "interview");
+  const switchedToOther = resolveTaskFormFields({
+    existing: templatedInterview,
+    title: "投行简历x3",
+    category: "job",
+    jobForm: "other",
+  });
+  assert.equal(switchedToOther.kind, "resume");
+  assert.equal(switchedToOther.amount, 3);
+  assert.equal(switchedToOther.steps, undefined);
+});
+
+test("setInterviewSteps caps at 20, aligns reordered done prefix, settles when all done, and skips cantonese", () => {
+  // 1. Caps >20 steps at MAX_INTERVIEW_STEPS so validateData stays true
+  let data = dataWith(task("big", "course", 1, { category: "course" }));
+  const twentyFive = Array.from({ length: 25 }, (_, i) => ({
+    id: `s-${i + 1}`,
+    title: `步骤 ${i + 1}`,
+    done: false,
+  }));
+  data = setInterviewSteps(data, "big", twentyFive, day);
+  assert.equal(data.tasks[0].steps.length, MAX_INTERVIEW_STEPS);
+  assert.equal(validateData(data), true);
+
+  // 2. Reordering steps with mixed done flags realigns done into a contiguous prefix so sequential toggle works
+  let reordered = dataWith(task("ord", "none", 1, { category: "job" }));
+  reordered = setInterviewSteps(
+    reordered,
+    "ord",
+    [
+      { id: "a", title: "新插入的第一步", done: false },
+      { id: "b", title: "原本做完的步骤", done: true },
+      { id: "c", title: "最后一步", done: false },
+    ],
+    day,
+  );
+  assert.deepEqual(
+    reordered.tasks[0].steps.map((s) => s.done),
+    [true, false, false],
+  );
+  // Next sequential step ("b", index 1) can now be checked without deadlock
+  reordered = toggleInterviewStep(reordered, "ord", "b", day);
+  assert.deepEqual(
+    reordered.tasks[0].steps.map((s) => s.done),
+    [true, true, false],
+  );
+
+  // 3. Deleting all remaining undone steps with date settles task completion & awards Kalami
+  let halfDone = dataWith(
+    task("half", "none", 1, {
+      category: "course",
+      steps: [
+        { id: "s1", title: "已完成步骤", done: true },
+        { id: "s2", title: "待删除步骤", done: false },
+      ],
+    }),
+  );
+  // Without date: leaves last step unchecked so open task never sits at 100% done
+  const withoutDate = setInterviewSteps(
+    halfDone,
+    "half",
+    [{ id: "s1", title: "已完成步骤", done: true }],
+  );
+  assert.equal(withoutDate.tasks[0].status, "open");
+  assert.equal(withoutDate.tasks[0].steps[0].done, false);
+
+  // With date: completes task and grants reward
+  const settled = setInterviewSteps(
+    halfDone,
+    "half",
+    [{ id: "s1", title: "已完成步骤", done: true }],
+    day,
+  );
+  assert.equal(settled.tasks[0].status, "done");
+  assert.equal(balance(settled), 2);
+  assert.equal(validateData(settled), true);
+
+  // 4. Cantonese timer tasks ignore step splitting
+  const cantoneseData = dataWith(task("can", "cantonese", 1));
+  const afterCantoneseSplit = setInterviewSteps(
+    cantoneseData,
+    "can",
+    [{ id: "s1", title: "热身", done: false }],
+    day,
+  );
+  assert.equal(afterCantoneseSplit.tasks[0].steps, undefined);
+});
+
+test("moveTasksToCurrentWeek pulls future custom tasks back to current week without touching generated or done tasks", () => {
+  const nextWeek = addDays(day, 7);
+  const futureCustom = task("f1", "course", 1, {
+    category: "course",
+    plannedWeek: nextWeek,
+    dueDate: addDays(nextWeek, 2),
+  });
+  const futureAuto = task(`auto:${nextWeek}:resume:1`, "resume", 5, {
+    plannedWeek: nextWeek,
+  });
+  let data = dataWith(futureCustom, futureAuto, task("done1", "none", 1));
+  data = completeTask(data, "done1", day);
+  const rewardBefore = balance(data);
+
+  const moved = moveTasksToCurrentWeek(
+    data,
+    ["f1", `auto:${nextWeek}:resume:1`, "done1"],
+    day,
+  );
+  assert.equal(moved.tasks.find((t) => t.id === "f1").plannedWeek, day);
+  // Due date on future week is preserved as-is
+  assert.equal(
+    moved.tasks.find((t) => t.id === "f1").dueDate,
+    addDays(nextWeek, 2),
+  );
+  // Generated task is untouched
+  assert.equal(
+    moved.tasks.find((t) => t.id === `auto:${nextWeek}:resume:1`).plannedWeek,
+    nextWeek,
+  );
+  assert.equal(balance(moved), rewardBefore);
+  assert.equal(validateData(moved), true);
+});
+
+test("calendarItemsByDate dynamically projects task DDLs, preserves manual events, and deduplicates legacy blank copies", () => {
+  const tOpen = task("t1", "interview", 1, {
+    title: "Cathay 终面",
+    category: "job",
+    dueDate: "2026-10-20",
+  });
+  const tArchived = task("t2", "course", 1, {
+    title: "已清空作业",
+    category: "course",
+    dueDate: "2026-10-20",
+    status: "archived",
+  });
+  const events = [
+    // Legacy blank auto-created duplicate matching tOpen on 2026-10-20 -> skipped
+    {
+      id: "ev-legacy",
+      title: "Cathay 终面",
+      date: "2026-10-20",
+      time: "",
+      kind: "interview",
+      note: "",
+    },
+    // Manual event with time/note even with same title -> preserved!
+    {
+      id: "ev-timed",
+      title: "Cathay 终面",
+      date: "2026-10-20",
+      time: "14:30",
+      kind: "interview",
+      note: "Zoom 链接在邮箱",
+    },
+    // Two distinct manual events with identical titles on another date -> both preserved!
+    {
+      id: "ev-dup-1",
+      title: "复盘打卡",
+      date: "2026-10-21",
+      time: "",
+      kind: "reminder",
+      note: "",
+    },
+    {
+      id: "ev-dup-2",
+      title: "复盘打卡",
+      date: "2026-10-21",
+      time: "",
+      kind: "reminder",
+      note: "",
+    },
+  ];
+
+  let data = { ...dataWith(tOpen, tArchived), events };
+  let map = calendarItemsByDate(data.events, data.tasks);
+
+  const oct20 = map.get("2026-10-20") ?? [];
+  assert.equal(oct20.length, 2);
+  assert.equal(oct20[0].id, "ev-ev-timed");
+  assert.equal(oct20[0].time, "14:30");
+  assert.equal(oct20[1].id, "task-t1");
+  assert.equal(oct20[1].done, false);
+
+  const oct21 = map.get("2026-10-21") ?? [];
+  assert.equal(oct21.length, 2);
+
+  // Updating task DDL moves it automatically to the new date
+  const movedTask = { ...tOpen, dueDate: "2026-10-25" };
+  data = saveTask(data, movedTask, day);
+  map = calendarItemsByDate(data.events, data.tasks);
+  assert.equal(
+    (map.get("2026-10-25") ?? []).some((i) => i.id === "task-t1"),
+    true,
+  );
+
+  // Completing the task marks done: true on the calendar item
+  data = completeTask(data, "t1", day);
+  map = calendarItemsByDate(data.events, data.tasks);
+  assert.equal(
+    (map.get("2026-10-25") ?? []).find((i) => i.id === "task-t1")?.done,
+    true,
+  );
+});
+

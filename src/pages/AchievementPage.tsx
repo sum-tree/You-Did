@@ -41,18 +41,20 @@ export function AchievementPage({
         {data.rewards.length === 0 ? (
           <p>暂无奖励记录。</p>
         ) : (
-          data.rewards
-            .slice()
-            .reverse()
-            .map((reward) => (
-              <div key={reward.id}>
-                <span>
-                  {reward.label}
-                  <small>{shortDate(reward.date)}</small>
-                </span>
-                <strong>+{reward.amount}</strong>
-              </div>
-            ))
+          <div className="balance-history-scroll">
+            {data.rewards
+              .slice()
+              .reverse()
+              .map((reward) => (
+                <div key={reward.id}>
+                  <span>
+                    {reward.label}
+                    <small>{shortDate(reward.date)}</small>
+                  </span>
+                  <strong>+{reward.amount}</strong>
+                </div>
+              ))}
+          </div>
         )}
       </details>
       <section
