@@ -2,20 +2,27 @@ import { ChevronRight, Flame } from "lucide-react";
 import {
   addDays,
   balance,
+  canChangeMainline,
   cantoneseStreak,
+  MAINLINE_NAME,
+  mainlineFor,
   monthBalance,
   weekStart,
   weekStats,
 } from "../domain.ts";
-import type { AppData } from "../domain.ts";
+import type { AppData, Mainline } from "../domain.ts";
 import { categoryIcon, KalamiIcon, Progress, shortDate } from "../components.tsx";
+
+const MAINLINES: Mainline[] = ["job", "course", "speech"];
 
 export function AchievementPage({
   data,
   today,
+  onMainline,
 }: {
   data: AppData;
   today: string;
+  onMainline: (mode: Mainline) => void;
 }) {
   const week = weekStart(today);
   const stats = weekStats(data, week);
@@ -23,6 +30,8 @@ export function AchievementPage({
   const monthTotal = monthBalance(data, currentMonth);
   const totalBalance = balance(data);
   const { streak, checkedInToday } = cantoneseStreak(data, today);
+  const mainline = mainlineFor(data, week);
+  const mainlineOpen = canChangeMainline(data, today);
   return (
     <>
       <p className="week-range">
@@ -81,6 +90,31 @@ export function AchievementPage({
           </span>
         </div>
       </section>
+      <section className="goal-card mainline" aria-label="本周主线">
+        <div className="mainline-heading">
+          <h3>本周主线</h3>
+          <small>
+            {mainlineOpen
+              ? "本周完成揾工任务前可修改"
+              : "本周已完成揾工任务，主线已锁定"}
+          </small>
+        </div>
+        <div className="mainline-options" role="radiogroup" aria-label="本周主线">
+          {MAINLINES.map((mode) => (
+            <button
+              key={mode}
+              type="button"
+              role="radio"
+              aria-checked={mainline === mode}
+              className={mainline === mode ? "selected" : ""}
+              disabled={!mainlineOpen && mainline !== mode}
+              onClick={() => mainlineOpen && mainline !== mode && onMainline(mode)}
+            >
+              {MAINLINE_NAME[mode]}
+            </button>
+          ))}
+        </div>
+      </section>
       <h2 className="section-title">待办项</h2>
       <section className="goal-card job">
         <div className="goal-heading">
@@ -92,6 +126,11 @@ export function AchievementPage({
           </span>
         </div>
         <Progress value={stats.jobPercent} label="香港揾工本周进度" />
+        <p className="goal-note">
+          投递 {Math.min(stats.resumes, stats.jobTarget)} / {stats.jobTarget} 份
+          {stats.interviewTotal > 0 &&
+            ` · 测试/面试 ${stats.interviewDone} / ${stats.interviewTotal}`}
+        </p>
       </section>
       <section className="goal-card speech">
         <div className="goal-heading">

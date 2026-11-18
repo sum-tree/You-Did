@@ -8,6 +8,8 @@ import {
   Trophy,
 } from "lucide-react";
 import {
+  MAINLINE_NAME,
+  setMainline,
   balance,
   chooseDaily,
   chooserCandidates,
@@ -294,7 +296,18 @@ export default function App() {
           />
         )}
         {page === "achievement" && (
-          <AchievementPage data={data} today={today} />
+          <AchievementPage
+            data={data}
+            today={today}
+            onMainline={(mode) => {
+              void update((previous) => setMainline(previous, today, mode)).then(
+                (result) => {
+                  if (result?.status === "saved")
+                    setToast(`本周主线：${MAINLINE_NAME[mode]}`);
+                },
+              );
+            }}
+          />
         )}
         {page === "pool" && (
           <PoolPage

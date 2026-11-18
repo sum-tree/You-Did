@@ -43,6 +43,9 @@ import {
   getStartMonth,
   visibleYearlyMonthsStats,
   calendarDayItems,
+  canChangeMainline,
+  mainlineFor,
+  setMainline,
   detectJobFormMode,
   MAX_INTERVIEW_STEPS,
   moveTasksToCurrentWeek,
@@ -96,41 +99,41 @@ test("course completion receives its single reward and is idempotent", () => {
 test("task contribution records quantity rather than task count", () => {
   const done = completeTask(dataWith(task("cv", "resume", 3)), "cv", day);
   assert.equal(weekStats(done, day).resumes, 3);
-  assert.equal(balance(done), 4);
+  assert.equal(balance(done), 3);
 });
 test("job target needs 15 resumes AND all scheduled interviews", () => {
   let data = dataWith(task("cv", "resume", 15), task("interview", "interview"));
   data = completeTask(data, "cv", day);
   assert.equal(weekStats(data, day).jobPercent, 50);
-  assert.equal(balance(data), 4);
+  assert.equal(balance(data), 15);
   data = completeTask(data, "interview", day);
   assert.equal(weekStats(data, day).jobPercent, 100);
-  assert.equal(balance(data), 26);
+  assert.equal(balance(data), 37);
   assert.equal(settleRewards(data, day, day).rewards.length, 3);
 });
 test("no scheduled interview means that condition is already satisfied", () => {
   const data = completeTask(dataWith(task("cv", "resume", 15)), "cv", day);
   assert.equal(weekStats(data, day).interviewTotal, 0);
   assert.equal(weekStats(data, day).jobComplete, true);
-  assert.equal(balance(data), 14);
+  assert.equal(balance(data), 25);
 });
 test("job challenges accumulate early and are paid after base target completion", () => {
   let data = dataWith(task("cv", "resume", 22), task("interview", "interview"));
   data = completeTask(data, "cv", day);
-  assert.equal(balance(data), 4);
+  assert.equal(balance(data), 20); // 22 applications, capped at 20
   data = completeTask(data, "interview", day);
-  assert.equal(balance(data), 34); // resume 4, interview 12, base 10, two extra tiers 8
+  assert.equal(balance(data), 50); // applications 20, interview 12, base 10, two extra tiers 8
   assert.equal(weekStats(data, day).jobTiers, 2);
-  assert.equal(balance(settleRewards(data, day, day)), 34);
+  assert.equal(balance(settleRewards(data, day, day)), 50);
 });
 test("new interview recalculates progress without retracting or reissuing rewards", () => {
   let data = completeTask(dataWith(task("cv", "resume", 18)), "cv", day);
-  assert.equal(balance(data), 18);
+  assert.equal(balance(data), 32);
   data = saveTask(data, task("late", "interview"), day);
   assert.equal(weekStats(data, day).jobPercent, 50);
-  assert.equal(balance(data), 18);
+  assert.equal(balance(data), 32);
   data = completeTask(data, "late", day);
-  assert.equal(balance(data), 30);
+  assert.equal(balance(data), 44);
   assert.equal(
     data.rewards.filter((r) => r.id === `goal:${day}:job`).length,
     1,
@@ -207,7 +210,7 @@ test("completion counts in actual week and base rewards can occur in different w
   data = completeTask(data, "week2", "2026-10-19");
   assert.equal(weekStats(data, day).resumes, 15);
   assert.equal(weekStats(data, "2026-10-19").resumes, 15);
-  assert.equal(balance(data), 28);
+  assert.equal(balance(data), 50);
 });
 test("a carried interview counts in the completion week", () => {
   const data = completeTask(
@@ -409,7 +412,7 @@ test("valid backups retain earned rewards when a new interview lowers progress",
   let data = completeTask(dataWith(task("cv", "resume", 18)), "cv", day);
   data = saveTask(data, task("new-interview", "interview"), day);
   assert.equal(weekStats(data, day).jobPercent, 50);
-  assert.equal(balance(data), 18);
+  assert.equal(balance(data), 32);
   assert.equal(validateData(data), true);
 });
 
@@ -445,9 +448,9 @@ test("an interview completed before its planned week satisfies that week", () =>
 test("moving the last open interview away settles the now-met goal", () => {
   let data = dataWith(task("cv", "resume", 15), task("interview", "interview"));
   data = completeTask(data, "cv", "2026-10-13");
-  assert.equal(balance(data), 4);
+  assert.equal(balance(data), 15);
   data = moveTasks(data, ["interview"], "2026-10-14");
-  assert.equal(balance(data), 14);
+  assert.equal(balance(data), 25);
   const goal = data.rewards.find((r) => r.id === `goal:${day}:job`);
   assert.equal(goal.date, "2026-10-14");
   assert.equal(validateData(data), true);
@@ -522,9 +525,9 @@ test("each week generates the thirteen fixed tasks once", () => {
   assert.deepEqual(
     data.tasks.map((t) => [t.id, t.title, t.kind, t.amount, t.plannedWeek]),
     [
-      [auto("resume", 1), "香港秋招简历x5", "resume", 5, day],
-      [auto("resume", 2), "香港秋招简历x5", "resume", 5, day],
-      [auto("resume", 3), "香港秋招简历x5", "resume", 5, day],
+      [auto("resume", 1), "香港岗位投递x5", "resume", 5, day],
+      [auto("resume", 2), "香港岗位投递x5", "resume", 5, day],
+      [auto("resume", 3), "香港岗位投递x5", "resume", 5, day],
       [auto("cantonese", 1), "粤语30分钟", "cantonese", 1, day],
       [auto("cantonese", 2), "粤语30分钟", "cantonese", 1, day],
       [auto("cantonese", 3), "粤语30分钟", "cantonese", 1, day],
@@ -631,7 +634,7 @@ test("a task completed today can be undone and loses its own reward", () => {
 });
 test("undo revokes the goal and tiers that completion produced today", () => {
   const data = completeTask(dataWith(task("cv", "resume", 18)), "cv", day);
-  assert.equal(balance(data), 18);
+  assert.equal(balance(data), 32);
   const undone = uncompleteTask(data, "cv", day);
   assert.equal(balance(undone), 0);
   assert.equal(validateData(undone), true);
@@ -640,27 +643,27 @@ test("undo keeps rewards earned on earlier days", () => {
   let data = dataWith(task("cv1", "resume", 15), task("cv2", "resume", 3));
   data = completeTask(data, "cv1", day);
   data = completeTask(data, "cv2", nextDay);
-  assert.equal(balance(data), 22);
+  assert.equal(balance(data), 32);
   const undone = uncompleteTask(data, "cv2", nextDay);
-  assert.equal(balance(undone), 14);
+  assert.equal(balance(undone), 25);
   assert.equal(undone.rewards.some((r) => r.id === `goal:${day}:job`), true);
   assert.equal(validateData(undone), true);
 });
 test("undoing the interview that completed the goal revokes it", () => {
   let data = dataWith(task("cv", "resume", 15), task("iv", "interview"));
   data = finishAll(data, ["cv", "iv"]);
-  assert.equal(balance(data), 26);
+  assert.equal(balance(data), 37);
   const undone = uncompleteTask(data, "iv", day);
-  assert.equal(balance(undone), 4);
+  assert.equal(balance(undone), 15);
   assert.equal(weekStats(undone, day).jobComplete, false);
   assert.equal(validateData(undone), true);
 });
 test("undoing an unrelated task never touches goal rewards", () => {
   let data = finishAll(dataWith(task("cv", "resume", 15), task("hw", "course")), ["cv", "hw"]);
   data = saveTask(data, task("late", "interview"), day);
-  assert.equal(balance(data), 15);
+  assert.equal(balance(data), 26);
   const undone = uncompleteTask(data, "hw", day);
-  assert.equal(balance(undone), 14);
+  assert.equal(balance(undone), 25);
   assert.equal(undone.rewards.some((r) => r.id === `goal:${day}:job`), true);
   assert.equal(validateData(undone), true);
 });
@@ -701,7 +704,7 @@ test("without scheduled interviews job progress follows resumes only", () => {
 test("each kind of task earns its own reward", () => {
   const cases = [
     ["none", 1, 2],
-    ["resume", 3, 4],
+    ["resume", 3, 3],
     ["test", 1, 8],
     ["cantonese", 1, 2],
     ["english", 3, 4],
@@ -740,9 +743,9 @@ test("tests and written exams gate the job goal like interviews", () => {
   assert.equal(weekStats(data, day).jobPercent, 50);
   data = completeTask(data, "t", day);
   assert.equal(weekStats(data, day).jobComplete, true);
-  assert.equal(balance(data), 4 + 8 + 10);
+  assert.equal(balance(data), 15 + 8 + 10);
   const undone = uncompleteTask(data, "t", day);
-  assert.equal(balance(undone), 4);
+  assert.equal(balance(undone), 15);
 });
 test("version 1 records are recomputed under the new reward rules", () => {
   const legacy = {
@@ -775,7 +778,7 @@ test("version 1 records are recomputed under the new reward rules", () => {
   assert.equal(upgraded.completions.find((c) => c.taskId === "t").kind, "test");
   assert.deepEqual(
     upgraded.rewards.map((r) => [r.id, r.amount]),
-    [["task:cv", 4], ["task:t", 8], ["task:c", 1], [`goal:${day}:job`, 10], [`bonus:${day}:job:1`, 4]],
+    [["task:cv", 18], ["task:t", 8], ["task:c", 1], [`goal:${day}:job`, 10], [`bonus:${day}:job:1`, 4]],
   );
   assert.equal(validateData(upgraded), true);
   const current = completeTask(dataWith(task("a")), "a", day);
@@ -794,7 +797,7 @@ test("interview cards can show the current reward and when it next drops", () =>
 test("generated tasks report their series and todo display name", () => {
   const data = ensureWeek(emptyData(), day);
   const names = data.tasks.map((t) => [generatedSeries(t), SERIES_NAME[generatedSeries(t)]]);
-  assert.deepEqual(names[0], ["resume", "香港秋招简历投递"]);
+  assert.deepEqual(names[0], ["resume", "香港岗位投递"]);
   assert.deepEqual(names[3], ["cantonese", "粤语口语练习"]);
   assert.deepEqual(names[10], ["english", "英语口语练习"]);
   assert.equal(generatedSeries(task("mine", "resume", 5)), undefined);
@@ -1819,3 +1822,174 @@ test("calendarDayItems defaults to manual events only and includes all tasks whe
   assert.ok((allItems.get(todayDate) ?? []).length >= 2);
 });
 
+
+// ---- Weekly mainline (PRD-New 4.2) ----
+const cw = "2026-11-16"; // first course-mainline week
+const cwAuto = (series, n, week = cw) => `auto:${week}:${series}:${n}`;
+const jobIds = (data, date) =>
+  dailyTasks(data, date)
+    .filter((t) => t.category === "job")
+    .map((t) => t.id);
+
+test("records without a mainline become course from the week of 2026-11-16", () => {
+  const before = ensureWeek(emptyData(), "2026-11-12");
+  assert.equal(mainlineFor(before, "2026-11-09"), "job");
+  assert.equal(before.mainline, undefined);
+  const data = ensureWeek(before, "2026-11-18");
+  assert.deepEqual(data.mainline, { [cw]: "course" });
+  assert.equal(mainlineFor(data, cw), "course");
+  assert.equal(mainlineFor(data, "2026-11-23"), "course"); // later weeks inherit
+  assert.equal(mainlineFor(data, "2026-11-09"), "job"); // earlier weeks unchanged
+  const mine = data.tasks.filter((t) => t.id.startsWith(`auto:${cw}:`));
+  assert.equal(mine.filter((t) => generatedSeries(t) === "resume").length, 0);
+  assert.deepEqual(
+    mine.filter((t) => generatedSeries(t) === "search").map((t) => [t.title, t.kind, t.category]),
+    Array(4).fill(["检索合适的4个岗位", "none", "job"]),
+  );
+  assert.deepEqual(
+    mine.filter((t) => generatedSeries(t) === "apply").map((t) => [t.title, t.kind, t.amount]),
+    Array(7).fill(["香港岗位投递x2", "resume", 2]),
+  );
+  assert.equal(validateData(data), true);
+  assert.equal(ensureWeek(data, "2026-11-19"), data);
+});
+
+test("switching to course keeps completed job tasks and replaces open x5 ones", () => {
+  // A week already running the job mainline, with one x5 done.
+  let data = ensureWeek({ ...emptyData(), mainline: { "2026-11-09": "job" } }, cw);
+  data = chooseDaily(data, cw, [cwAuto("resume", 2)]);
+  data = completeTask(data, cwAuto("resume", 1), cw);
+  assert.equal(canChangeMainline(data, cw), false);
+  assert.equal(setMainline(data, cw, "course"), data); // locked after a job completion
+  // Without that completion the switch goes through.
+  data = ensureWeek({ ...emptyData(), mainline: { "2026-11-09": "job" } }, cw);
+  data = chooseDaily(data, cw, [cwAuto("resume", 2)]);
+  const switched = setMainline(data, "2026-11-17", "course");
+  assert.equal(mainlineFor(switched, cw), "course");
+  assert.equal(switched.tasks.some((t) => generatedSeries(t) === "resume"), false);
+  assert.deepEqual(switched.daily[cw], []); // stale day-plan reference pruned
+  assert.equal(validateData(switched), true);
+  // And back again regenerates the x5 series and removes the open cycle.
+  const back = setMainline(switched, "2026-11-17", "job");
+  assert.equal(back.tasks.filter((t) => generatedSeries(t) === "resume").length, 3);
+  assert.equal(back.tasks.some((t) => ["search", "apply"].includes(generatedSeries(t))), false);
+});
+
+test("course week cycles search, apply, apply with one automatic step per day", () => {
+  // Automatic plan only: one step a day, so a 7-day week reaches 4 applications.
+  let data = ensureWeek(emptyData(), cw);
+  const autoOrder = [];
+  for (let i = 0; i < 7; i++) {
+    const date = addDays(cw, i);
+    const [id] = jobIds(data, date);
+    autoOrder.push(generatedSeries(data.tasks.find((t) => t.id === id)));
+    data = completeTask(data, id, date);
+    assert.deepEqual(jobIds(data, date), []); // next step waits for tomorrow
+  }
+  assert.deepEqual(autoOrder, ["search", "apply", "apply", "search", "apply", "apply", "search"]);
+  assert.equal(weekStats(data, cw).resumes, 8);
+  assert.equal(weekStats(data, cw).jobPercent, 57);
+});
+
+test("adding extra cycle steps by hand reaches 14 applications in a week", () => {
+  let data = ensureWeek(emptyData(), cw);
+  const order = [];
+  for (let i = 0; i < 11; i++) {
+    const date = addDays(cw, Math.floor(i / 2)); // two steps a day
+    const next = chooserCandidates(data, date).find((t) =>
+      ["search", "apply"].includes(generatedSeries(t)),
+    );
+    order.push(generatedSeries(next));
+    data = completeTask(data, next.id, date);
+  }
+  assert.deepEqual(order, [
+    "search", "apply", "apply", "search", "apply", "apply",
+    "search", "apply", "apply", "search", "apply",
+  ]);
+  // 7 × x2 = 14 applications: goal reached, cycle stops, no extra tiers.
+  const stats = weekStats(data, cw);
+  assert.equal(stats.resumes, 14);
+  assert.equal(stats.jobTarget, 14);
+  assert.equal(stats.jobPercent, 100);
+  assert.equal(stats.jobTiers, 0);
+  assert.equal(
+    chooserCandidates(data, addDays(cw, 6)).some((t) =>
+      ["search", "apply"].includes(generatedSeries(t)),
+    ),
+    false,
+  );
+  // search 4×1 + apply 7×2 + goal 10
+  assert.equal(balance(data), 4 + 14 + 10);
+  assert.equal(validateData(data), true);
+});
+
+test("course week progress averages applications/14 with interviews", () => {
+  let data = ensureWeek(emptyData(), cw);
+  data = saveTask(data, task("iv", "interview"), cw);
+  data = saveTask(data, task("cv", "resume", 14), cw);
+  data = completeTask(data, "cv", cw);
+  assert.equal(weekStats(data, cw).jobPercent, 50);
+  assert.equal(weekStats(data, cw).jobComplete, false);
+  data = completeTask(data, "iv", cw);
+  assert.equal(weekStats(data, cw).jobPercent, 100);
+  assert.equal(data.rewards.some((r) => r.id === `goal:${cw}:job`), true);
+  // The cycle stops once 14 applications are in, whatever task supplied them.
+  assert.deepEqual(jobIds(data, addDays(cw, 1)), []);
+  assert.equal(validateData(data), true);
+});
+
+test("the arrange panel offers only the next course-cycle step", () => {
+  let data = ensureWeek(emptyData(), cw);
+  const cycle = (list) =>
+    list.filter((t) => ["search", "apply"].includes(generatedSeries(t))).map((t) => t.id);
+  assert.deepEqual(cycle(chooserCandidates(data, cw)), [cwAuto("search", 1)]);
+  data = completeTask(data, cwAuto("search", 1), cw);
+  // Hidden from today's automatic list, but can still be added by hand today.
+  assert.deepEqual(jobIds(data, cw), []);
+  assert.deepEqual(cycle(chooserCandidates(data, cw)), [cwAuto("apply", 1)]);
+  data = chooseDaily(data, cw, [cwAuto("apply", 1)]);
+  assert.deepEqual(jobIds(data, cw), [cwAuto("apply", 1)]);
+});
+
+test("application rewards follow the count; older 4-kalami rewards stay valid", () => {
+  const x5 = completeTask(dataWith(task("cv", "resume", 5)), "cv", day);
+  assert.equal(balance(x5), 5);
+  const legacy = {
+    ...x5,
+    rewards: x5.rewards.map((r) => (r.id === "task:cv" ? { ...r, amount: 4 } : r)),
+  };
+  assert.equal(validateData(legacy), true);
+  const wrong = {
+    ...x5,
+    rewards: x5.rewards.map((r) => (r.id === "task:cv" ? { ...r, amount: 3 } : r)),
+  };
+  assert.equal(validateData(wrong), false);
+});
+
+test("open x5 tasks with the old title are renamed, completed ones keep it", () => {
+  let data = ensureWeek({ ...emptyData(), mainline: { [cw]: "job" } }, cw);
+  const old = (t) => (generatedSeries(t) === "resume" ? { ...t, title: "香港秋招简历x5" } : t);
+  data = { ...data, tasks: data.tasks.map(old) };
+  data = completeTask(data, cwAuto("resume", 1), cw);
+  const renamed = ensureWeek(data, cw);
+  const titles = renamed.tasks
+    .filter((t) => generatedSeries(t) === "resume")
+    .map((t) => [t.status, t.title]);
+  assert.deepEqual(titles, [
+    ["done", "香港秋招简历x5"],
+    ["open", "香港岗位投递x5"],
+    ["open", "香港岗位投递x5"],
+  ]);
+  assert.equal(validateData(renamed), true);
+});
+
+test("course-week job goals validate against 14 and reject tiers", () => {
+  let data = ensureWeek(emptyData(), cw);
+  data = saveTask(data, task("cv", "resume", 14), cw);
+  data = completeTask(data, "cv", cw);
+  assert.equal(validateData(data), true);
+  const tier = { id: `bonus:${cw}:job:1`, amount: 4, label: "x", date: cw, week: cw };
+  assert.equal(validateData({ ...data, rewards: [...data.rewards, tier] }), false);
+  const badMode = { ...data, mainline: { [cw]: "other" } };
+  assert.equal(validateData(badMode), false);
+});

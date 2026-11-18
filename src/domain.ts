@@ -51,6 +51,13 @@ export interface CalendarEvent {
   kind: "interview" | "deadline" | "reminder";
   note: string;
 }
+// Weekly focus chosen on the achievement page. "speech" behaves like "job" for now.
+export type Mainline = "job" | "course" | "speech";
+export const MAINLINE_NAME: Record<Mainline, string> = {
+  job: "香港揾工",
+  course: "课程作业",
+  speech: "大胆说口语",
+};
 export interface AppData {
   // 2: reward rules of PRD v0.6. Version 1 records are recomputed on load.
   version: 2;
@@ -62,6 +69,8 @@ export interface AppData {
   courseWeek: number;
   // Week whose generated tasks were created and whose predecessors were cleared.
   autoWeek?: string;
+  // Mainline per week start; a week without an entry inherits the latest earlier one.
+  mainline?: Record<string, Mainline>;
 }
 export const CATEGORY: Record<Category, { name: string; short: string }> = {
   job: { name: "香港揾工", short: "揾工" },
@@ -205,11 +214,18 @@ export function cantoneseReward(task: Task): number {
   const mins = Math.min(30, Math.floor(task.duration / 60));
   return mins >= 30 ? 2 : mins >= 15 ? 1 : 0;
 }
+// Job applications earn 1 kalami per application (capped by the ledger's 20 limit);
+// the course-week "search" step earns 1.
 export function taskReward(task: Task, date: string): number {
   if (task.kind === "interview") return interviewReward(task, date);
   if (task.kind === "cantonese") return cantoneseReward(task);
+  if (task.kind === "resume") return Math.min(20, Math.max(1, task.amount));
+  if (seriesOf(task.id) === "search") return SEARCH_REWARD;
   return TASK_REWARD[task.kind];
 }
+const SEARCH_REWARD = 1;
+// Before per-application rewards, every job application task earned 4.
+const LEGACY_RESUME_REWARD = 4;
 export function emptyData(): AppData {
   return {
     version: 2,
@@ -377,7 +393,8 @@ export function weekStats(data: AppData, week: string) {
   const cantonese = sum("cantonese");
   const english = sum("english");
   const listening = sum("listening");
-  const jobComplete = resumes >= 15 && interviewDone === interviewIds.size;
+  const jobTarget = mainlineJobTarget(mainlineFor(data, week));
+  const jobComplete = resumes >= jobTarget && interviewDone === interviewIds.size;
   const units = speechUnits(records, data.tasks);
   const speechComplete = speechGoalMet(units);
   const speechCounted =
@@ -396,11 +413,12 @@ export function weekStats(data: AppData, week: string) {
     jobComplete,
     speechComplete,
     // With no interview scheduled, progress is resumes alone (not a free 50%).
+    jobTarget,
     jobPercent:
       interviewIds.size === 0
-        ? percent(ratio(resumes, 15), ratio(resumes, 15), jobComplete)
+        ? percent(ratio(resumes, jobTarget), ratio(resumes, jobTarget), jobComplete)
         : percent(
-            ratio(resumes, 15),
+            ratio(resumes, jobTarget),
             ratio(interviewDone, interviewIds.size),
             jobComplete,
           ),
@@ -409,7 +427,7 @@ export function weekStats(data: AppData, week: string) {
     speechPercent: speechComplete
       ? 100
       : Math.min(99, Math.floor((speechCounted / speechTotal) * 100)),
-    jobTiers: Math.floor(Math.max(0, resumes - 15) / 3),
+    jobTiers: mainlineJobTiers(mainlineFor(data, week), resumes),
     speechTiers: Math.floor(listening / 10),
     completed: records.length,
     earned: data.rewards
@@ -554,7 +572,8 @@ export function uncompleteTask(
   if (!job && !speech) return next;
   const category = job ? "job" : "speech";
   const goalLost = job
-    ? stats.resumes < 15 || (gatesJob(record.kind) && !stats.jobComplete)
+    ? stats.resumes < stats.jobTarget ||
+      (gatesJob(record.kind) && !stats.jobComplete)
     : record.kind !== "listening" && !stats.speechComplete;
   const maxTier = job ? stats.jobTiers : stats.speechTiers;
   const revoked = (reward: Reward) => {
@@ -1085,7 +1104,7 @@ function prioritySort(a: Task, b: Task) {
 export const WEEKLY_TASKS = [
   {
     series: "resume",
-    title: "香港秋招简历x5",
+    title: "香港岗位投递x5",
     category: "job",
     kind: "resume",
     amount: 5,
@@ -1110,10 +1129,29 @@ export const WEEKLY_TASKS = [
     count: 3,
     priority: 1,
   },
+  // Course-mainline job cycle: search → apply → apply → search → ...
+  {
+    series: "search",
+    title: "检索合适的4个岗位",
+    category: "job",
+    kind: "none",
+    amount: 1,
+    count: 4,
+    priority: 1,
+  },
+  {
+    series: "apply",
+    title: "香港岗位投递x2",
+    category: "job",
+    kind: "resume",
+    amount: 2,
+    count: 7,
+    priority: 1,
+  },
 ] as const;
 type Series = (typeof WEEKLY_TASKS)[number]["series"];
 function seriesOf(id: string): Series | undefined {
-  return /^auto:\d{4}-\d{2}-\d{2}:(resume|english|cantonese):\d+$/.exec(
+  return /^auto:\d{4}-\d{2}-\d{2}:(resume|english|cantonese|search|apply):\d+$/.exec(
     id,
   )?.[1] as Series | undefined;
 }
@@ -1122,10 +1160,77 @@ export const generatedSeries = (task: Task) => seriesOf(task.id);
 // The todo list shows each weekly series as one calm row without quantities;
 // daily cards keep the task titles with their amounts.
 export const SERIES_NAME: Record<Series, string> = {
-  resume: "香港秋招简历投递",
+  resume: "香港岗位投递",
   cantonese: "粤语口语练习",
   english: "英语口语练习",
+  search: "检索合适岗位",
+  apply: "香港岗位投递（课程周）",
 };
+const LEGACY_RESUME_TITLE = "香港秋招简历x5";
+const JOB_SERIES: readonly Series[] = ["resume", "search", "apply"];
+const CYCLE_SERIES: readonly Series[] = ["search", "apply"];
+// Course weeks need 14 applications (7 × apply x2); other weeks keep 15.
+export function mainlineJobTarget(mode: Mainline): number {
+  return mode === "course" ? 14 : 15;
+}
+export function mainlineJobTiers(mode: Mainline, resumes: number): number {
+  return mode === "course" ? 0 : Math.floor(Math.max(0, resumes - 15) / 3);
+}
+// The course mainline was first chosen for the week of 2026-11-16; records that
+// never stored a mainline start from there.
+const INITIAL_MAINLINE: Record<string, Mainline> = { "2026-11-16": "course" };
+function mainlineEntries(data: AppData, week: string) {
+  return data.mainline ?? (week >= "2026-11-16" ? INITIAL_MAINLINE : {});
+}
+export function mainlineFor(data: AppData, week: string): Mainline {
+  const entries = mainlineEntries(data, week);
+  const keys = Object.keys(entries)
+    .filter((key) => key <= week)
+    .sort();
+  return keys.length ? entries[keys[keys.length - 1]] : "job";
+}
+function weeklyPlan(mode: Mainline) {
+  return WEEKLY_TASKS.filter((item) =>
+    mode === "course" ? item.series !== "resume" : !CYCLE_SERIES.includes(item.series),
+  );
+}
+// The mainline can change until a job task of this week is completed.
+export function canChangeMainline(data: AppData, date: string): boolean {
+  const week = weekStart(date);
+  return !data.completions.some(
+    (item) => item.week === week && item.category === "job",
+  );
+}
+export function setMainline(
+  data: AppData,
+  date: string,
+  mode: Mainline,
+): AppData {
+  const week = weekStart(date);
+  if (!canChangeMainline(data, date)) return data;
+  if (data.mainline?.[week] === mode) return data;
+  const mainline = { ...mainlineEntries(data, week), [week]: mode };
+  return ensureWeek({ ...data, mainline }, date);
+}
+// Next step of the course-week job cycle: search when applications have caught up
+// with twice the searches, otherwise apply; stops once 14 applications are in.
+function cycleNext(data: AppData, open: Task[], week: string): Task | undefined {
+  const records = data.completions.filter((item) => item.week === week);
+  const applied = records
+    .filter((item) => item.kind === "resume")
+    .reduce((total, item) => total + item.amount, 0);
+  if (applied >= mainlineJobTarget("course")) return undefined;
+  const count = (series: Series) =>
+    records.filter((item) => seriesOf(item.taskId) === series).length;
+  const earliest = (series: Series) =>
+    open
+      .filter((task) => seriesOf(task.id) === series && task.plannedWeek === week)
+      .sort((a, b) => a.id.localeCompare(b.id))[0];
+  const wantSearch = count("apply") >= 2 * count("search");
+  return wantSearch
+    ? (earliest("search") ?? earliest("apply"))
+    : (earliest("apply") ?? earliest("search"));
+}
 export const SEMESTER_START_WEEK = "2026-08-31";
 
 export function computeCourseWeek(date: string): number {
@@ -1163,7 +1268,28 @@ export function ensureWeek(data: AppData, date: string): AppData {
   }
 
   const courseWeekChanged = nextCourseWeek !== data.courseWeek;
-  const hasMissingWeeklyTasks = WEEKLY_TASKS.some((item) => {
+  const mainline = data.mainline ?? (week >= "2026-11-16" ? INITIAL_MAINLINE : undefined);
+  const mode = mainlineFor({ ...data, mainline }, week);
+  const plan = weeklyPlan(mode);
+  // Open job tasks of this week that belong to the other mainline are replaced.
+  const stray = (task: Task) => {
+    const series = seriesOf(task.id);
+    return (
+      !!series &&
+      JOB_SERIES.includes(series) &&
+      !plan.some((item) => item.series === series) &&
+      task.status === "open" &&
+      task.plannedWeek === week &&
+      task.id.startsWith(`auto:${week}:`)
+    );
+  };
+  const renamable = (task: Task) =>
+    seriesOf(task.id) === "resume" &&
+    task.status === "open" &&
+    task.title === LEGACY_RESUME_TITLE;
+  const hasStray = data.tasks.some(stray);
+  const hasRename = data.tasks.some(renamable);
+  const hasMissingWeeklyTasks = plan.some((item) => {
     for (let n = 1; n <= item.count; n++) {
       if (!data.tasks.some((t) => t.id === `auto:${week}:${item.series}:${n}`)) {
         return true;
@@ -1171,7 +1297,16 @@ export function ensureWeek(data: AppData, date: string): AppData {
     }
     return false;
   });
-  if (data.autoWeek && data.autoWeek >= week && !courseWeekChanged && !hasMissingWeeklyTasks) return data;
+  if (
+    data.autoWeek &&
+    data.autoWeek >= week &&
+    !courseWeekChanged &&
+    !hasMissingWeeklyTasks &&
+    !hasStray &&
+    !hasRename &&
+    mainline === data.mainline
+  )
+    return data;
 
   const existing = new Set(data.tasks.map((task) => task.id));
   const tasks: Task[] = data.tasks
@@ -1184,16 +1319,17 @@ export function ensureWeek(data: AppData, date: string): AppData {
       ) {
         return false;
       }
-      return true;
+      return !stray(task);
     })
     .map((task) => {
       if (!isGenerated(task)) return task;
+      if (renamable(task)) task = { ...task, title: WEEKLY_TASKS[0].title };
       if (task.status === "open" && task.priority === 0) {
         return { ...task, priority: 1 };
       }
       return task;
     });
-  for (const item of WEEKLY_TASKS)
+  for (const item of plan)
     for (let n = 1; n <= item.count; n++) {
       const id = `auto:${week}:${item.series}:${n}`;
       if (existing.has(id)) continue;
@@ -1219,7 +1355,14 @@ export function ensureWeek(data: AppData, date: string): AppData {
       ids.filter((id) => kept.has(id)),
     ]),
   );
-  return { ...data, tasks, daily, autoWeek: week, courseWeek: nextCourseWeek };
+  return {
+    ...data,
+    tasks,
+    daily,
+    autoWeek: week,
+    courseWeek: nextCourseWeek,
+    ...(mainline ? { mainline } : {}),
+  };
 }
 // Open tasks planned up to this week, or already due, may be placed on a day.
 export function schedulable(task: Task, date: string): boolean {
@@ -1363,7 +1506,13 @@ export function dailyTasks(data: AppData, date: string): Task[] {
           )
           .sort((a, b) => a.id.localeCompare(b.id))[0];
   const picked: Task[] = [];
-  const resume = next("resume");
+  // Course weeks run the search/apply cycle instead of the x5 series; one step a day.
+  const resume =
+    mainlineFor(data, currentWeek) === "course"
+      ? CYCLE_SERIES.some((series) => doneToday.has(series))
+        ? undefined
+        : cycleNext(data, open, currentWeek)
+      : next("resume");
   if (resume) picked.push(resume);
   const cantonese = next("cantonese");
   const urgentLimit = cantonese ? 2 : 3;
@@ -1413,9 +1562,19 @@ export function chooserCandidates(
   const currentWeek = weekStart(date);
   const open = data.tasks.filter((task) => schedulable(task, date));
   const picked = new Map<Series, Task>();
+  // The course-week cycle offers only its next step (or a step already selected).
+  const cycleTask =
+    open.find(
+      (task) =>
+        CYCLE_SERIES.includes(seriesOf(task.id)!) &&
+        task.plannedWeek === currentWeek &&
+        selection.includes(task.id),
+    ) ?? cycleNext(data, open, currentWeek);
+  if (cycleTask) picked.set("search", cycleTask);
   for (const task of open) {
     const series = seriesOf(task.id);
     if (!series || task.plannedWeek !== currentWeek) continue;
+    if (CYCLE_SERIES.includes(series)) continue;
     const current = picked.get(series);
     const taskSelected = selection.includes(task.id);
     const currentSelected = current ? selection.includes(current.id) : false;
@@ -1538,7 +1697,18 @@ function validateRecord(value: unknown, version: 1 | 2): boolean {
     typeof d.daily !== "object" ||
     Array.isArray(d.daily) ||
     (d.autoWeek !== undefined &&
-      !(validDate(d.autoWeek) && weekStart(d.autoWeek) === d.autoWeek))
+      !(validDate(d.autoWeek) && weekStart(d.autoWeek) === d.autoWeek)) ||
+    (d.mainline !== undefined &&
+      (!d.mainline ||
+        typeof d.mainline !== "object" ||
+        Array.isArray(d.mainline) ||
+        Object.keys(d.mainline).length > 2000 ||
+        !Object.entries(d.mainline).every(
+          ([week, mode]) =>
+            validDate(week) &&
+            weekStart(week) === week &&
+            ["job", "course", "speech"].includes(mode as string),
+        )))
   )
     return false;
   const step = (s: unknown) =>
@@ -1674,8 +1844,12 @@ function validateRecord(value: unknown, version: 1 | 2): boolean {
       task.kind !== completion.kind ||
       task.amount !== completion.amount ||
       !reward ||
-      reward.amount !==
-        (version === 1 ? 5 : taskReward(task, completion.date)) ||
+      (reward.amount !==
+        (version === 1 ? 5 : taskReward(task, completion.date)) &&
+        // Applications completed before per-application rewards earned 4.
+        !(version === 2 &&
+          task.kind === "resume" &&
+          reward.amount === LEGACY_RESUME_REWARD)) ||
       reward.date !== completion.date ||
       reward.week !== completion.week ||
       reward.label !== completion.title
@@ -1712,9 +1886,10 @@ function validateRecord(value: unknown, version: 1 | 2): boolean {
     // Only immutable quantities can be checked; do not require the current goal to be complete.
     // Speaking goals granted before the 4+2 rule used 2 sessions + 9 questions;
     // either rule is accepted so earlier weeks' rewards stay valid.
+    const mode = mainlineFor(d as AppData, reward.week);
     if (
       category === "job"
-        ? week.resumes < 15
+        ? week.resumes < mainlineJobTarget(mode)
         : (week.cantonese < 2 || week.english < 9) &&
           !speechGoalMet(
             speechUnits(
@@ -1731,7 +1906,7 @@ function validateRecord(value: unknown, version: 1 | 2): boolean {
       const tier = Number(match[3]);
       const maxTier =
         category === "job"
-          ? Math.floor((week.resumes - 15) / 3)
+          ? mainlineJobTiers(mode, week.resumes)
           : Math.floor(week.listening / 10);
       if (
         !Number.isSafeInteger(tier) ||

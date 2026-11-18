@@ -2526,3 +2526,54 @@ main {
   padding: 4px 8px;
 }
 
+
+.goal-card.mainline {
+  padding: 14px 17px;
+}
+.mainline-heading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 11px;
+}
+.mainline-heading h3 {
+  margin: 0;
+  font-size: 15px;
+}
+.mainline-heading small,
+.goal-note {
+  color: var(--muted);
+  font-size: 12px;
+}
+.goal-note {
+  margin: 9px 0 0;
+  font-variant-numeric: tabular-nums;
+}
+.mainline-options {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+.mainline-options button {
+  border: 1px solid #e5e0cf;
+  background: #f1eee4;
+  color: #5d614e;
+  border-radius: 12px;
+  padding: 9px 4px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.mainline-options button.selected {
+  background: #f4e5d2;
+  border-color: #b44f2e;
+  color: var(--accent);
+}
+.mainline-options button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+.goal-card.mainline + .section-title {
+  margin-top: 22px;
+}
