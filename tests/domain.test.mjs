@@ -1508,6 +1508,7 @@ test("cantoneseStreak counts consecutive days of Cantonese completions", () => {
   assert.deepEqual(cantoneseStreak(data, "2026-10-15"), {
     streak: 0,
     checkedInToday: false,
+    owed: 0,
   });
 
   // Non-cantonese completions do not count
@@ -1516,6 +1517,7 @@ test("cantoneseStreak counts consecutive days of Cantonese completions", () => {
   assert.deepEqual(cantoneseStreak(data, "2026-10-15"), {
     streak: 0,
     checkedInToday: false,
+    owed: 0,
   });
 
   // Consecutive days across week & month boundaries (Dec 30, Dec 31, Jan 1)
@@ -1531,6 +1533,7 @@ test("cantoneseStreak counts consecutive days of Cantonese completions", () => {
   assert.deepEqual(cantoneseStreak(yearData, "2027-01-01"), {
     streak: 2,
     checkedInToday: false,
+    owed: 0,
   });
 
   // After checking in on Jan 1, streak increments to 3
@@ -1538,6 +1541,7 @@ test("cantoneseStreak counts consecutive days of Cantonese completions", () => {
   assert.deepEqual(cantoneseStreak(yearData, "2027-01-01"), {
     streak: 3,
     checkedInToday: true,
+    owed: 0,
   });
 
   // Undoing today's completion reverts checkedInToday and decrements streak
@@ -1545,12 +1549,15 @@ test("cantoneseStreak counts consecutive days of Cantonese completions", () => {
   assert.deepEqual(cantoneseStreak(undone, "2027-01-01"), {
     streak: 2,
     checkedInToday: false,
+    owed: 0,
   });
 
-  // Missing a full day (checking on Jan 2 when Jan 1 was missed) resets streak to 0
+  // Missing Jan 1 no longer resets at once: it is owed and can be repaid by Jan 4
   assert.deepEqual(cantoneseStreak(undone, "2027-01-02"), {
-    streak: 0,
+    streak: 3,
     checkedInToday: false,
+    owed: 1,
+    repayBy: "2027-01-04",
   });
 });
 
@@ -1992,4 +1999,57 @@ test("course-week job goals validate against 14 and reject tiers", () => {
   assert.equal(validateData({ ...data, rewards: [...data.rewards, tier] }), false);
   const badMode = { ...data, mainline: { [cw]: "other" } };
   assert.equal(validateData(badMode), false);
+});
+
+test("a missed Cantonese day can be repaid within 3 days, never banked ahead", () => {
+  const sessions = (pairs) => {
+    let data = emptyData();
+    pairs.forEach(([date, count], i) => {
+      for (let n = 0; n < count; n++) {
+        const id = `c${i}-${n}`;
+        data = saveTask(data, task(id, "cantonese", 1), date);
+        data = completeTask(data, id, date);
+      }
+    });
+    return data;
+  };
+  // 16 done, 17 missed, 18 done twice: repaid, streak continues.
+  let data = sessions([["2026-11-16", 1], ["2026-11-18", 2]]);
+  assert.deepEqual(cantoneseStreak(data, "2026-11-18"), {
+    streak: 3,
+    checkedInToday: true,
+    owed: 0,
+  });
+  // Only once on 18: still owing 17, due by 20.
+  data = sessions([["2026-11-16", 1], ["2026-11-18", 1]]);
+  assert.deepEqual(cantoneseStreak(data, "2026-11-18"), {
+    streak: 3,
+    checkedInToday: true,
+    owed: 1,
+    repayBy: "2026-11-20",
+  });
+  // Repaid on the last allowed day (20) keeps it alive.
+  data = sessions([["2026-11-16", 1], ["2026-11-18", 1], ["2026-11-19", 1], ["2026-11-20", 2]]);
+  assert.equal(cantoneseStreak(data, "2026-11-20").streak, 5);
+  assert.equal(cantoneseStreak(data, "2026-11-20").owed, 0);
+  // Not repaid by 20: on 21 the streak restarts.
+  data = sessions([["2026-11-16", 1], ["2026-11-18", 1], ["2026-11-19", 1], ["2026-11-20", 1]]);
+  assert.equal(cantoneseStreak(data, "2026-11-20").owed, 1);
+  assert.equal(cantoneseStreak(data, "2026-11-21").streak, 0);
+  data = sessions([["2026-11-16", 1], ["2026-11-18", 1], ["2026-11-19", 1], ["2026-11-20", 1], ["2026-11-21", 1]]);
+  assert.deepEqual(cantoneseStreak(data, "2026-11-21"), {
+    streak: 1,
+    checkedInToday: true,
+    owed: 0,
+  });
+  // Extra sessions do not bank: 3 on 16, nothing on 17–20 breaks on 21.
+  data = sessions([["2026-11-16", 3]]);
+  assert.equal(cantoneseStreak(data, "2026-11-17").owed, 0);
+  assert.equal(cantoneseStreak(data, "2026-11-18").owed, 1);
+  assert.equal(cantoneseStreak(data, "2026-11-20").owed, 3);
+  assert.deepEqual(cantoneseStreak(data, "2026-11-21"), {
+    streak: 0,
+    checkedInToday: false,
+    owed: 0,
+  });
 });

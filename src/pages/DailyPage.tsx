@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import {
   Check,
+  ChevronDown,
   ChevronRight,
   Ellipsis,
   Pause,
@@ -81,6 +82,7 @@ function CantoneseTimer({
   task: Task;
   onFinish: (task: Task, duration: number) => void;
 }) {
+  const [open, setOpen] = useState(false);
   const [timerState, setTimerState] = useState<CantoneseTimerState>(() =>
     getSavedCantoneseTimer(task.id),
   );
@@ -150,17 +152,34 @@ function CantoneseTimer({
   const currentTier = mins >= 30 ? 2 : mins >= 15 ? 1 : 0;
 
   return (
-    <div className="cantonese-timer-block">
-      <div className="cantonese-timer-header">
-        <div className="cantonese-timer-time">
+    <div className={`cantonese-timer-block ${open ? "is-open" : "is-collapsed"}`}>
+      {/* Collapsed by default to a thin bar; tap to show milestones and controls. */}
+      <button
+        type="button"
+        className="cantonese-timer-header"
+        aria-expanded={open}
+        onClick={() => setOpen((value) => !value)}
+      >
+        <span className="cantonese-timer-time">
           <Timer
             size={16}
             className={timerState.running ? "timer-icon running" : "timer-icon"}
           />
           <span className="timer-digits">{timeStr}</span>
           <span className="timer-target">/ 30:00</span>
-        </div>
-      </div>
+        </span>
+        {!open && (
+          <span className="cantonese-mini-track" aria-hidden="true">
+            <span style={{ width: `${progressPercent}%` }} />
+          </span>
+        )}
+        <span className="cantonese-timer-toggle-label">
+          {open ? "收起" : timerState.running ? "计时中" : "展开"}
+          <ChevronDown size={14} className="cantonese-timer-chevron" />
+        </span>
+      </button>
+      {open && (
+        <>
 
       <div className="cantonese-milestones-track">
         <div className="cantonese-milestones">
@@ -255,6 +274,8 @@ function CantoneseTimer({
           </>
         )}
       </div>
+        </>
+      )}
     </div>
   );
 }

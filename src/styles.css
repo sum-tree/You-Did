@@ -2526,54 +2526,112 @@ main {
   padding: 4px 8px;
 }
 
-
-.goal-card.mainline {
-  padding: 14px 17px;
-}
-.mainline-heading {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 10px;
-  margin-bottom: 11px;
-}
-.mainline-heading h3 {
-  margin: 0;
-  font-size: 15px;
-}
-.mainline-heading small,
-.goal-note {
-  color: var(--muted);
-  font-size: 12px;
-}
 .goal-note {
   margin: 9px 0 0;
+  color: var(--muted);
+  font-size: 12px;
   font-variant-numeric: tabular-nums;
 }
-.mainline-options {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 8px;
+.week-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 10px;
 }
-.mainline-options button {
-  border: 1px solid #e5e0cf;
-  background: #f1eee4;
-  color: #5d614e;
-  border-radius: 12px;
-  padding: 9px 4px;
-  font-size: 13px;
-  font-weight: 600;
+.week-row .week-range {
+  margin-bottom: 0;
+}
+.mainline-chip {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 3px 9px 3px 10px;
+  border-radius: 20px;
+  background: #f4e5d2;
+  border: 1px solid #dfcbaf;
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 650;
   cursor: pointer;
 }
-.mainline-options button.selected {
-  background: #f4e5d2;
-  border-color: #b44f2e;
-  color: var(--accent);
+.mainline-chip select {
+  appearance: none;
+  -webkit-appearance: none;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  padding: 0;
+  cursor: inherit;
 }
-.mainline-options button:disabled {
-  opacity: 0.45;
+.mainline-chip select:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+  border-radius: 4px;
+}
+.mainline-chip.locked {
+  background: #f1eee4;
+  border-color: #e5e0cf;
+  color: #8c8f7d;
   cursor: default;
 }
-.goal-card.mainline + .section-title {
-  margin-top: 22px;
+.mainline-chip.locked select {
+  opacity: 1;
+}
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+/* Collapsible Cantonese timer: a thin bar until opened. */
+.cantonese-timer-block.is-collapsed {
+  padding: 6px 10px;
+  gap: 0;
+}
+button.cantonese-timer-header {
+  width: 100%;
+  gap: 10px;
+  border: 0;
+  background: transparent;
+  padding: 0;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.cantonese-timer-block.is-collapsed .timer-digits {
+  font-size: 14px;
+}
+.cantonese-mini-track {
+  flex: 1;
+  height: 4px;
+  border-radius: 4px;
+  background: #e5ecd8;
+  overflow: hidden;
+}
+.cantonese-mini-track span {
+  display: block;
+  height: 100%;
+  background: #7ea463;
+  border-radius: 4px;
+}
+.cantonese-timer-toggle-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  font-size: 12px;
+  color: #6a7c5c;
+  white-space: nowrap;
+}
+.cantonese-timer-chevron {
+  transition: transform 0.2s ease;
+}
+.cantonese-timer-block.is-open .cantonese-timer-chevron {
+  transform: rotate(180deg);
 }

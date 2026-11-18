@@ -1,4 +1,4 @@
-import { ChevronRight, Flame } from "lucide-react";
+import { ChevronDown, ChevronRight, Flame, Lock } from "lucide-react";
 import {
   addDays,
   balance,
@@ -29,14 +29,38 @@ export function AchievementPage({
   const currentMonth = today.slice(0, 7);
   const monthTotal = monthBalance(data, currentMonth);
   const totalBalance = balance(data);
-  const { streak, checkedInToday } = cantoneseStreak(data, today);
+  const { streak, checkedInToday, owed, repayBy } = cantoneseStreak(data, today);
   const mainline = mainlineFor(data, week);
   const mainlineOpen = canChangeMainline(data, today);
   return (
     <>
-      <p className="week-range">
-        本周 · {shortDate(week)} — {shortDate(addDays(week, 6))}
-      </p>
+      <div className="week-row">
+        <p className="week-range">
+          本周 · {shortDate(week)} — {shortDate(addDays(week, 6))}
+        </p>
+        <label
+          className={`mainline-chip ${mainlineOpen ? "" : "locked"}`}
+          title={
+            mainlineOpen
+              ? "本周主线：完成揾工任务前可更换"
+              : "本周已完成揾工任务，主线已锁定"
+          }
+        >
+          <span className="visually-hidden">本周主线</span>
+          <select
+            value={mainline}
+            disabled={!mainlineOpen}
+            onChange={(e) => onMainline(e.target.value as Mainline)}
+          >
+            {MAINLINES.map((mode) => (
+              <option key={mode} value={mode}>
+                {MAINLINE_NAME[mode]}
+              </option>
+            ))}
+          </select>
+          {mainlineOpen ? <ChevronDown size={13} /> : <Lock size={12} />}
+        </label>
+      </div>
       <details className="reward-history balance-panel">
         <summary>
           <KalamiIcon size={18} />
@@ -81,38 +105,15 @@ export function AchievementPage({
               <small> 天</small>
             </strong>
             <small>
-              {checkedInToday
-                ? "今日已打卡"
-                : streak > 0
-                  ? "今日待打卡"
-                  : "暂无打卡"}
+              {owed > 0 && repayBy
+                ? `欠${owed}天 · ${shortDate(repayBy)}前补上`
+                : checkedInToday
+                  ? "今日已打卡"
+                  : streak > 0
+                    ? "今日待打卡"
+                    : "暂无打卡"}
             </small>
           </span>
-        </div>
-      </section>
-      <section className="goal-card mainline" aria-label="本周主线">
-        <div className="mainline-heading">
-          <h3>本周主线</h3>
-          <small>
-            {mainlineOpen
-              ? "本周完成揾工任务前可修改"
-              : "本周已完成揾工任务，主线已锁定"}
-          </small>
-        </div>
-        <div className="mainline-options" role="radiogroup" aria-label="本周主线">
-          {MAINLINES.map((mode) => (
-            <button
-              key={mode}
-              type="button"
-              role="radio"
-              aria-checked={mainline === mode}
-              className={mainline === mode ? "selected" : ""}
-              disabled={!mainlineOpen && mainline !== mode}
-              onClick={() => mainlineOpen && mainline !== mode && onMainline(mode)}
-            >
-              {MAINLINE_NAME[mode]}
-            </button>
-          ))}
         </div>
       </section>
       <h2 className="section-title">待办项</h2>

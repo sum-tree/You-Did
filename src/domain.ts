@@ -339,27 +339,60 @@ export function speechGoalMet(units: { cantonese: number; english: number }) {
 function ratio(value: number, target: number): number {
   return target === 0 ? 1 : Math.min(1, value / target);
 }
+// Cantonese streak (PRD-New 2.x): one session a day. A missed day becomes a debt
+// that extra sessions can repay within 3 days (by the end of missed day + 3);
+// an unpaid debt past that breaks the streak. Extra sessions never bank ahead.
+export const STREAK_GRACE_DAYS = 3;
 export function cantoneseStreak(
   data: AppData,
   today: string,
-): { streak: number; checkedInToday: boolean } {
-  const dates = new Set(
-    data.completions
-      .filter((item) => item.kind === "cantonese" && validDate(item.date))
-      .map((item) => item.date),
-  );
-  const checkedInToday = dates.has(today);
-  let cursor = checkedInToday
-    ? today
-    : dates.has(addDays(today, -1))
-      ? addDays(today, -1)
-      : null;
-  let streak = 0;
-  while (cursor && dates.has(cursor)) {
-    streak += 1;
-    cursor = addDays(cursor, -1);
+): {
+  streak: number;
+  checkedInToday: boolean;
+  owed: number;
+  repayBy?: string;
+} {
+  const perDay = new Map<string, number>();
+  for (const item of data.completions)
+    if (item.kind === "cantonese" && validDate(item.date) && item.date <= today)
+      perDay.set(item.date, (perDay.get(item.date) ?? 0) + 1);
+  const checkedInToday = perDay.has(today);
+  const first = [...perDay.keys()].sort()[0];
+  let start: string | null = null;
+  let debts: string[] = [];
+  for (let day = first; day && day <= today; day = addDays(day, 1)) {
+    if (start && debts.some((missed) => addDays(missed, STREAK_GRACE_DAYS) < day)) {
+      start = null;
+      debts = [];
+    }
+    let sessions = perDay.get(day) ?? 0;
+    if (!start) {
+      if (sessions === 0) continue;
+      start = day;
+    }
+    if (sessions > 0) sessions -= 1;
+    else if (day !== today) debts.push(day); // today is still in progress
+    while (sessions > 0 && debts.length > 0) {
+      debts.shift();
+      sessions -= 1;
+    }
   }
-  return { streak, checkedInToday };
+  if (!start) return { streak: 0, checkedInToday, owed: 0 };
+  const end = checkedInToday ? today : addDays(today, -1);
+  const streak =
+    end < start
+      ? 0
+      : Math.round(
+          (dateObject(end).getTime() - dateObject(start).getTime()) / 86400000,
+        ) + 1;
+  return debts.length
+    ? {
+        streak,
+        checkedInToday,
+        owed: debts.length,
+        repayBy: addDays(debts[0], STREAK_GRACE_DAYS),
+      }
+    : { streak, checkedInToday, owed: 0 };
 }
 export function weekStats(data: AppData, week: string) {
   const records = data.completions.filter((item) => item.week === week);
